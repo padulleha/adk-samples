@@ -22,3 +22,5 @@ os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
 os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
 
 from . import agent  # noqa: E402
+
+__all__ = ["agent"]

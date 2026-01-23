@@ -15,3 +15,5 @@
 """Exports the gap_analysis_agent."""
 
 from .agent import gap_analysis_agent
+
+__all__ = ["gap_analysis_agent"]
