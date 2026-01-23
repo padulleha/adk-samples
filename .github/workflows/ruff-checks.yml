@@ -23,6 +23,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
+    
+      - name: Install Reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
 
       # We run Ruff via Reviewdog to generate the UI suggestions
       - name: Run Ruff and Post Suggestions
