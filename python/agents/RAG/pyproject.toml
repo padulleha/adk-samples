@@ -9,6 +9,8 @@ authors = [
 license = { text = "Apache License 2.0" }
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
+
+# --- CORE DEPENDENCIES ---
 dependencies = [
     "google-cloud-aiplatform[adk,agent-engines]>=1.108.0",
     "google-adk>=1.10.0",
@@ -24,7 +26,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Tracing and observability tools
 lint = [
     "ruff>=0.4.6",
     "mypy>=1.15.0",
@@ -43,8 +44,13 @@ dev = [
     "agent-starter-pack>=0.14.1",
 ]
 
+# --- CI/CD AND TESTING METADATA ---
+[tool.agent-starter-pack.testing]
+RAG_CORPUS = "projects/adk-devops/locations/us-central1/ragCorpora/456"
+ENV = "test"
+
 [tool.ruff]
-extend = "../../../pyproject.toml"  # Inherit global rules from root
+extend = "../../../pyproject.toml"
 
 [tool.ruff.lint]
 extend-select = ["I"] 
