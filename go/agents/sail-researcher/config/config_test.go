@@ -19,12 +19,12 @@ func TestNew(t *testing.T) {
 				"GOOGLE_CLOUD_PROJECT": "my-project",
 			},
 			want: &Config{
-				Env:          DefaultEnv, // Default
+				Env:          "development", // Default
 				Project:      "my-project",
-				ModelName:    DefaultModelName, // Default
+				ModelName:    "gemini-2.0-flash-001", // Default
 				GeminiAPIKey: "gemini-key",
 				MapsAPIKey:   "maps-key",
-				Port:         DefaultPort, // Default
+				Port:         "8081", // Default
 			},
 			wantErr: false,
 		},
