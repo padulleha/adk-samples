@@ -117,7 +117,6 @@ Expand on the "Key Components" from above.
 
 3.  Set up Google Cloud credentials:
 
-    Otherwise:
     - At the top directory `travel-concierge/`, make a `.env` by copying `.env.example`
     - Set the following environment variables.
     - To use Vertex, make sure you have the Vertex AI API enabled in your project.
