@@ -47,7 +47,7 @@ project_root = app_dir.parent  # retail-ai-location-strategy/
 sys.path.insert(0, str(project_root))
 
 # Import the EXISTING root_agent - no modifications needed
-from app.agent import root_agent
+from app.agent import root_agent  # noqa: E402
 
 # Load environment variables from app/.env
 env_path = app_dir / ".env"
