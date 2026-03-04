@@ -75,6 +75,7 @@ jobs:
     # --- PERMISSIONS BLOCK FOR OIDC AUTHENTICATION ---
     permissions:
       contents: 'read'
+      id-token: 'write'
 
     strategy:
       fail-fast: false
