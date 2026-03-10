@@ -26,6 +26,8 @@ dev = [
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
     "google-adk[eval]>=1.5.0",
+    "agent-starter-pack>=0.32.0",
+
 ]
 deployment = [
     "absl-py>=2.2.1",
@@ -42,6 +44,19 @@ ignore = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["medical_pre_authorization"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore:Using `@model_validator`.*:pydantic.warnings.PydanticDeprecatedSince210",
+
+
+]
+
+[tool.agent-starter-pack.settings]
+agent_directory = "medical_pre_authorization"
+
 
 [build-system]
 requires = ["hatchling"]
