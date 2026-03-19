@@ -1,11 +1,12 @@
 from collections.abc import AsyncGenerator
 
-from google.adk.agents.workflow.events.event import Event
-from google.adk.agents.workflow.function_node import FunctionNode
+from google.adk.events.event import Event
+from google.adk.workflow._function_node import FunctionNode
+from google.adk.workflow._join_node import JoinNode
 from google.genai.types import Content, ModelContent, Part
 
 
-async def start_research_node(
+async def start_research(
     node_input: Content,
 ) -> AsyncGenerator[Event | list[str], None]:
     """Entry node for the research workflow. Puts the topic in state and yields a list of platforms to research."""
@@ -17,7 +18,7 @@ async def start_research_node(
     yield platforms_to_research
 
 
-async def combine_reports_node(
+async def combine_reports(
     node_input: Content,
 ) -> AsyncGenerator[str, None]:
     """Takes the Content object from parallel agents and joins their text parts into a single string."""
@@ -33,7 +34,7 @@ async def combine_reports_node(
         yield "\n\n---\n\n".join(report_texts)
 
 
-async def save_report_node(
+async def save_report(
     node_input: str,
 ) -> AsyncGenerator[Event | ModelContent, None]:
     """Saves the generated report to state and yields it for the user."""
@@ -44,11 +45,13 @@ async def save_report_node(
 
 # Node Wrappers
 start_node = FunctionNode(
-    start_research_node, name="Start Research Node", rerun_on_resume=True
+    start_research, name="Start Research Node", rerun_on_resume=True
 )
 
-combine_reports = FunctionNode(combine_reports_node, name="Combine Reports")
+join_node = JoinNode(name="Combine Reports")
+
+combine_reports_node = FunctionNode(combine_reports, name="Combinator Node")
 
 save_node = FunctionNode(
-    save_report_node, name="Save Report Node", rerun_on_resume=False
+    save_report, name="Save Report Node", rerun_on_resume=False
 )

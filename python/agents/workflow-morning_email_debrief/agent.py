@@ -1,6 +1,6 @@
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.workflow.events.event import Event
-from google.adk.agents.workflow.workflow_agent import WorkflowAgent
+from google.adk.events.event import Event
+from google.adk.workflow._workflow import Workflow
 from googleapiclient.discovery import build
 
 
@@ -45,7 +45,7 @@ format_news_agent = LlmAgent(
 )
 
 # --- Workflow Agent ---
-root_agent = WorkflowAgent(
+root_agent = Workflow(
     name="root_agent",
     edges=[
         ("START", retrieve_and_list_emails, format_news_agent),

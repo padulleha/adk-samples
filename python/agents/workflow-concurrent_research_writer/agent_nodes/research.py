@@ -1,12 +1,13 @@
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.workflow.parallel_worker import ParallelWorker
-from src.prompts import (
+from google.adk.workflow._parallel_worker import _ParallelWorker
+
+from ..prompts import (
     JOIN_AND_DISTILL_PROMPT,
 )
-from src.tools import execute_search
+from ..tools import execute_search
 
 # The LlmAgent that will be run in parallel for each platform.
-_research_worker_llm_agent = LlmAgent(
+research_worker_llm_agent = LlmAgent(
     # The name for the inner agent is not strictly necessary for the
     # workflow but can be useful for debugging.
     name="research_worker_llm_agent",
@@ -19,8 +20,7 @@ Execute a search on that platform for the topic and summarize the results.""",
 )
 
 # A single, reusable worker agent that will be run in parallel for each platform.
-research_worker_agent = ParallelWorker(_research_worker_llm_agent)
-
+research_worker_agent = _ParallelWorker(research_worker_llm_agent)
 
 # The Synthesizer joins the results from the parallel workers into a final report.
 distill_agent = LlmAgent(

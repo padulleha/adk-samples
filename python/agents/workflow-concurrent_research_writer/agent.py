@@ -2,19 +2,10 @@
 from functools import partial
 
 # from uuid import uuid4
-from google.adk.agents.workflow.base_node import START
-
 # from google.adk.agents.workflow.join_node import JoinNode
-from google.adk.agents.workflow.function_node import FunctionNode
-from google.adk.agents.workflow.parallel_worker import ParallelWorker
-from google.adk.agents.workflow.workflow_agent import WorkflowAgent
+from google.adk.workflow import FunctionNode, Workflow
+from google.adk.workflow._parallel_worker import _ParallelWorker
 
-# from google.adk.agents.run_config import RunConfig
-# from google.adk.sessions.in_memory_session_service import InMemorySessionService
-# from google.adk.sessions.session import Session
-# from google.adk.agents.invocation_context import InvocationContext
-# from google.genai.types import Content, ModelContent, Part
-# Local sub-agent and node imports
 from .agent_nodes.publishing import generate_blog_post_agent
 from .agent_nodes.research import (
     distill_agent,
@@ -26,20 +17,22 @@ from .function_nodes.publishing import (
     shoutout_node,
     start_blog,
 )
-from .function_nodes.research import save_node, start_node
+from .function_nodes.research import join_node, save_node, start_node
 
 # --- 1. Workflow Definitions ---
 
 # Research Workflow: A simple, linear chain. The `research_worker_agent`
 # is marked with `parallel_worker=True` so the framework will automatically
 # handle fanning out for each query and fanning in the results.
-research_workflow = WorkflowAgent(
+research_workflow = Workflow(
     name="research_workflow",
     edges=[
         (
-            START,
+            "START",
             start_node,
-            ParallelWorker(research_worker_agent),
+            _ParallelWorker(research_worker_agent),
+            join_node,
+            # combine_reports,
             distill_agent,
             save_node,
         ),
@@ -68,11 +61,13 @@ shoutout_to_reddit = FunctionNode(
     partial(shoutout_node, "REDDIT"), name="Shoutout to Reddit"
 )
 
-blog_workflow = WorkflowAgent(
+blog_workflow = Workflow(
     name="blog_workflow",
     edges=[
         # 1. Start, write blog, then route by length
-        (START, start_blog, generate_blog_post_agent, route_changer),
+        ("START", start_blog),
+        (start_blog, generate_blog_post_agent),
+        (generate_blog_post_agent, route_changer),
         # 2. Post to the primary platform based on the route from route_changer
         (route_changer, post_to_x, "X"),
         (route_changer, post_to_linkedin, "LINKEDIN"),
@@ -87,10 +82,10 @@ blog_workflow = WorkflowAgent(
         # If posted to Medium -> Shoutout to X and LinkedIn
         (post_to_medium, shoutout_to_x, "SHOUTOUT_X"),
         (post_to_medium, shoutout_to_linkedin, "SHOUTOUT_LINKEDIN"),
-    ],
+    ],  # type: ignore
 )
 
-root_agent = WorkflowAgent(
+root_agent = Workflow(
     name="root_agent",
     description="""
         Main workflow contucting the research and pubication phases of blog 

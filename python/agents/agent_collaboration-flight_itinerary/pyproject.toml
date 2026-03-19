@@ -1,7 +1,7 @@
 [project]
-name = "workflow-morning_email_debrief"
+name = "agent_collaboration-flight_itinerary"
 version = "0.1.0"
-description = "After it's deployed it will summarize the user's recent emails."
+description = "Takes in a code and reviews it's linting and tests."
 authors = [{ name = "Tommy Wagner", email = "wagnerthomas@google.com" }]
 license = {text = "Apache License 2.0"}
 readme = "README.md"
@@ -24,7 +24,7 @@ dev = [
 extend = "../../../pyproject.toml"
 
 [tool.ruff.lint.isort]
-known-first-party = ["workflow-morning_email_debrief"]
+known-first-party = ["agent_collaboration-flight_itinerary"]
 
 [build-system]
 requires = ["hatchling"]

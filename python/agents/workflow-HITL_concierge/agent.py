@@ -1,7 +1,7 @@
+from google.adk.agents.context import Context
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.workflow.events.request_input import RequestInput
-from google.adk.agents.workflow.workflow_agent import WorkflowAgent
-from google.adk.agents.workflow.workflow_context import Context
+from google.adk.events.request_input import RequestInput
+from google.adk.workflow._workflow import Workflow
 from google.genai.types import UserContent
 from pydantic import BaseModel
 
@@ -75,7 +75,7 @@ async def process_feedback(node_input: str):
 
 
 # --- Workflow ---
-root_agent = WorkflowAgent(
+root_agent = Workflow(
     name="root_agent",
     rerun_on_resume=True,
     edges=[

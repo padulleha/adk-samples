@@ -2,9 +2,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.workflow.base_node import START
-from google.adk.agents.workflow.events.event import Event
-from google.adk.agents.workflow.workflow_agent import WorkflowAgent
+from google.adk.events import Event
+from google.adk.workflow._workflow import Workflow
 
 city_generator_agent = LlmAgent(
     name="city_generator_agent",
@@ -33,9 +32,9 @@ city_report_agent = LlmAgent(
     """,
 )
 
-root_agent = WorkflowAgent(
+root_agent = Workflow(
     name="root_agent",
     edges=[
-        (START, city_generator_agent, lookup_time_function, city_report_agent)
+        ("START", city_generator_agent, lookup_time_function, city_report_agent)
     ],
 )
