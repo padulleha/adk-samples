@@ -61,6 +61,7 @@ Check out the agent samples below, organized by category:
 | [Google Trends Agent](google-trends-agent) | Surfaces top trending search trends from Google Trends using BigQuery dataset. Shows trending topics by region and time period. | BigQuery, Trend analysis, Sequential agent | Conversational | Medium | Sequential Agent | Marketing & Analytics |
 | [Hierarchical Workflow Automation](hierarchical-workflow-automation) | The "Hierarchical Workflow Automation" pattern is an automation process where multiple distinct tasks or transactions must be executed in a structured hierarchy across various systems to complete a full workflow | Multi-agent, Custom tool, BigQuery, Agent Tool | Workflow | Advanced | Multi Agent / Sequential Agent | Order Management / Customer Support |
 | [Plumber-Data-Engineering-Assistant](Plumber-Data-Engineering-Assistant) | A data engineering assistant agent capable of creating and deploy big data pipelines in Apache Spark, Apache Beam and dBT on GCP data stack via conversations | Big Data, Data Analytics, Streaming Analytics, Dataflow, Dataproc, Bigquery | Conversational | Hard | Multi Agent | Data & Analytics |
+| [README Harness](readme-harness) | Fetches a GitHub repo via MCP, generates a README against a quality checklist, and refines in a LoopAgent until a critic approves. Demonstrates SequentialAgent, LoopAgent, McpToolset, SkillToolset, and exit_loop. | SequentialAgent, LoopAgent, McpToolset, SkillToolset, MCP | Workflow | Intermediate | Multi Agent | Horizontal |
 
 
 
