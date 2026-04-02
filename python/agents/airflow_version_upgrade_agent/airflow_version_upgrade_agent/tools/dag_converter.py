@@ -14,20 +14,18 @@
 
 
 import logging
-from google.cloud import storage
-from google import genai
-from google.genai.types import (
-    GenerateContentConfig,
-    HttpOptions,
-    Retrieval,
-    Tool,
-    VertexAISearch,
-)
-
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from google import genai
+from google.cloud import storage
+from google.genai.types import (
+    GenerateContentConfig,
+    Retrieval,
+    Tool,
+    VertexAISearch,
+)
 
 # Define the path to the .env file
 env_file_path = Path(__file__).parent.parent / ".env"

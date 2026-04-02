@@ -13,12 +13,13 @@
 # limitations under the License.
 
 from datetime import datetime
+
 from airflow import DAG
-from airflow.operators.dummy_operator import DummyOperator
 from airflow.contrib.operators.bigquery_operator import BigQueryOperator
 from airflow.contrib.operators.gcs_to_bq import (
     GoogleCloudStorageToBigQueryOperator,
 )
+from airflow.operators.dummy_operator import DummyOperator
 
 default_args = {
     "owner": "migration_test",

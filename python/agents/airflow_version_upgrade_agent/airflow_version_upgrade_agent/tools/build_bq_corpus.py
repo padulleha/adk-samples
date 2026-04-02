@@ -15,16 +15,15 @@
 
 import json
 import logging
-from datetime import datetime, timezone
-from google.cloud import bigquery
-from google.cloud.exceptions import NotFound
-from google import genai
-from google.genai import types
-
 import os
+from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+from google import genai
+from google.cloud import bigquery
+from google.cloud.exceptions import NotFound
 
 # Define the path to the .env file
 env_file_path = Path(__file__).parent.parent / ".env"
@@ -58,9 +57,8 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-_BQ_TABLE_VERIFIED = False
 
-
+@cache
 def ensure_bq_table_exists():
     """
     Checks if the BigQuery table exists and creates it if it does not.
@@ -130,11 +128,7 @@ def generate_and_store_knowledge(
     Returns:
         str: A message indicating the completion of the knowledge base update.
     """
-    global _BQ_TABLE_VERIFIED
-
-    if not _BQ_TABLE_VERIFIED:
-        ensure_bq_table_exists()
-        _BQ_TABLE_VERIFIED = True
+    ensure_bq_table_exists()
 
     client = genai.Client(vertexai=True, project=PROJECT_ID, location="global")
     for result in research_results:
@@ -181,7 +175,7 @@ def generate_and_store_knowledge(
                 ),
                 "code_example_after": structured_data.get("code_example_after"),
                 "source_urls": source_urls,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
             }
 
             errors = bq_client.insert_rows_json(

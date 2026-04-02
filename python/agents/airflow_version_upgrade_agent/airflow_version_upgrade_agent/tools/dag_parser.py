@@ -15,6 +15,7 @@
 
 import ast
 import logging
+
 from google.cloud import storage
 
 logging.basicConfig(
@@ -73,7 +74,7 @@ class OperatorVisitor(ast.NodeVisitor):
         """
         if not full_path:
             return False
-        class_name = full_path.split(".")[-1]
+        class_name = full_path.rsplit(".", maxsplit=1)[-1]
         return class_name.endswith("Operator") or class_name.endswith("Sensor")
 
     def visit_Call(self, node: ast.Call):
@@ -168,7 +169,7 @@ def extract_operators_from_gcs(gcs_folder_uri: str) -> list[str]:
     if file_count == 0:
         logger.warning(f"No Python (.py) files found in '{gcs_folder_uri}'.")
 
-    return sorted(list(unique_operators))
+    return sorted(unique_operators)
 
 
 # Local testing
@@ -179,9 +180,8 @@ def extract_operators_from_gcs(gcs_folder_uri: str) -> list[str]:
 #     operators = extract_operators_from_gcs(dags_gcs_path)
 
 #     if operators:
-#         print("\n--- Unique Airflow Operators Found ---")
+#         print("\n Unique Airflow Operators Found")
 #         for op in operators:
 #             print(op)
-#         print("------------------------------------")
 #     else:
-#         print("\n--- No operators found or an error occurred. Check logs. ---")
+#         print("\n No operators found or an error occurred. Check logs.")

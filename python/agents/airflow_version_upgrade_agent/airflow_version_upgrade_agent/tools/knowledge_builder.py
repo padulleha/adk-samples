@@ -13,14 +13,13 @@
 # limitations under the License.
 
 
-from . import dag_parser
-from . import web_scrapper
-from . import build_bq_corpus
 import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from . import build_bq_corpus, dag_parser, web_scrapper
 
 # Define the path to the .env file
 env_file_path = Path(__file__).parent.parent / ".env"

@@ -15,12 +15,9 @@
 
 from google.adk.agents import LlmAgent
 from google.adk.models import Gemini
-from google.genai import Client, types
-from .tools import knowledge_builder, dag_converter
-from google.adk.tools.agent_tool import AgentTool
-from functools import cached_property
-from . import prompts
 
+from . import prompts
+from .tools import dag_converter, knowledge_builder
 
 # Agent for the knowledge base update workflow
 knowledge_base_agent = LlmAgent(

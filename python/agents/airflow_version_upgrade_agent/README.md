@@ -24,17 +24,17 @@ The solution is composed of two primary agents that orchestrate a complex workfl
 ```text
 [User] -> [Migration Assistant Agent (Cloud Run)]
   |
-  +-- Q: KB Exists?
+  + - Q: KB Exists?
       |
-      +-- (No) --> [Knowledge Base Agent]
+      + - (No) -> [Knowledge Base Agent]
       |               |
       |               1. Parse DAGs from [GCS]
       |               2. Scrape Web Content
       |               3. Structure with [Gemini] -> Store in [BigQuery]
       |               |
-      |               +--> [Vertex AI Search] indexes BigQuery table
+      |               +-> [Vertex AI Search] indexes BigQuery table
       |
-      +-- (Yes) -> [DAG Converter Tool]
+      + - (Yes) -> [DAG Converter Tool]
                       |
                       1. Read DAG from [GCS Source]
                       2. Generate migrated code with [Gemini + RAG via Vertex AI Search]

@@ -13,12 +13,13 @@
 # limitations under the License.
 
 
-import logging
-import requests
-from bs4 import BeautifulSoup
 import json
+import logging
 import os
 from pathlib import Path
+
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 # Import the Vertex AI Search (Discovery Engine) client
@@ -122,9 +123,7 @@ def research_operator_documentation(
     return results
 
 
-# ---------------------------------------------------------
 # For local testing
-# ---------------------------------------------------------
 # if __name__ == '__main__':
 #     # Example usage
 #     test_operator = 'airflow.providers.google.cloud.operators.bigquery.BigQueryExecuteQueryOperator'
