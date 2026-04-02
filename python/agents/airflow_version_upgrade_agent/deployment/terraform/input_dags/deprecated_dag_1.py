@@ -19,38 +19,40 @@ from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator
 
 default_args = {
-    'owner': 'migration_test',
-    'depends_on_past': False,
-    'start_date': datetime(2023, 1, 1),
-    'email_on_failure': False,
-    'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    "owner": "migration_test",
+    "depends_on_past": False,
+    "start_date": datetime(2023, 1, 1),
+    "email_on_failure": False,
+    "email_on_retry": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
 dag = DAG(
-    'deprecated_dag_1',
+    "deprecated_dag_1",
     default_args=default_args,
     schedule_interval=timedelta(days=1),
     catchup=False,
 )
 
 start_task = DummyOperator(
-    task_id='start',
+    task_id="start",
     dag=dag,
 )
 
+
 def print_hello():
-    return 'Hello from deprecated PythonOperator!'
+    return "Hello from deprecated PythonOperator!"
+
 
 hello_task = PythonOperator(
-    task_id='hello_task',
+    task_id="hello_task",
     python_callable=print_hello,
     dag=dag,
 )
 
 bash_task = BashOperator(
-    task_id='echo_task',
+    task_id="echo_task",
     bash_command='echo "Running deprecated BashOperator"',
     dag=dag,
 )

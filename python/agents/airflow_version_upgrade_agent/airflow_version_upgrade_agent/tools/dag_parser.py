@@ -17,8 +17,12 @@ import ast
 import logging
 from google.cloud import storage
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
+
 
 class OperatorVisitor(ast.NodeVisitor):
     """
@@ -26,7 +30,12 @@ class OperatorVisitor(ast.NodeVisitor):
     This version is specifically filtered to 'airflow.operators', 'airflow.providers',
     and 'airflow.contrib' modules.
     """
-    ALLOWED_PREFIXES = ('airflow.operators', 'airflow.providers', 'airflow.contrib')
+
+    ALLOWED_PREFIXES = (
+        "airflow.operators",
+        "airflow.providers",
+        "airflow.contrib",
+    )
 
     def __init__(self, filepath: str):
         self.filepath = filepath
@@ -64,8 +73,8 @@ class OperatorVisitor(ast.NodeVisitor):
         """
         if not full_path:
             return False
-        class_name = full_path.split('.')[-1]
-        return class_name.endswith('Operator') or class_name.endswith('Sensor')
+        class_name = full_path.split(".")[-1]
+        return class_name.endswith("Operator") or class_name.endswith("Sensor")
 
     def visit_Call(self, node: ast.Call):
         """
@@ -77,7 +86,9 @@ class OperatorVisitor(ast.NodeVisitor):
             func_name = node.func.id
             if func_name in self.import_map:
                 full_path = self.import_map[func_name]
-        elif isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+        elif isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Name
+        ):
             module_alias = node.func.value.id
             if module_alias in self.import_map:
                 base_module_path = self.import_map[module_alias]
@@ -102,56 +113,71 @@ def extract_operators_from_gcs(gcs_folder_uri: str) -> list[str]:
         list[str]: A sorted list of unique Airflow operators found in the GCS folder.
     """
     unique_operators = set()
-    
+
     if not gcs_folder_uri.startswith("gs://"):
-        logger.error(f"Invalid GCS URI: '{gcs_folder_uri}'. It must start with 'gs://'.")
+        logger.error(
+            f"Invalid GCS URI: '{gcs_folder_uri}'. It must start with 'gs://'."
+        )
         return []
-        
+
     try:
         bucket_name, prefix = gcs_folder_uri.replace("gs://", "").split("/", 1)
-        if prefix and not prefix.endswith('/'):
-            prefix += '/'
-            
+        if prefix and not prefix.endswith("/"):
+            prefix += "/"
+
         storage_client = storage.Client()
-        logger.info(f"Listing blobs in bucket '{bucket_name}' with prefix '{prefix}'")
+        logger.info(
+            f"Listing blobs in bucket '{bucket_name}' with prefix '{prefix}'"
+        )
         blobs = storage_client.list_blobs(bucket_name, prefix=prefix)
     except Exception as e:
-        logger.error(f"Failed to connect to or parse GCS URI '{gcs_folder_uri}': {e}", exc_info=True)
+        logger.error(
+            f"Failed to connect to or parse GCS URI '{gcs_folder_uri}': {e}",
+            exc_info=True,
+        )
         return []
 
     file_count = 0
     for blob in blobs:
-        if blob.name.endswith('/') or not blob.name.endswith(".py"):
+        if blob.name.endswith("/") or not blob.name.endswith(".py"):
             continue
-            
+
         file_count += 1
         gcs_path = f"gs://{bucket_name}/{blob.name}"
         logger.info(f"Parsing file: {gcs_path}")
         try:
-            source_code = blob.download_as_bytes().decode('utf-8')
+            source_code = blob.download_as_bytes().decode("utf-8")
             tree = ast.parse(source_code, filename=gcs_path)
             visitor = OperatorVisitor(gcs_path)
             visitor.visit(tree)
             if visitor.instantiated_operators:
-                logger.info(f"Found operators in {gcs_path}: {visitor.instantiated_operators}")
+                logger.info(
+                    f"Found operators in {gcs_path}: {visitor.instantiated_operators}"
+                )
                 unique_operators.update(visitor.instantiated_operators)
         except SyntaxError as e:
-            logger.warning(f"Could not parse {gcs_path} due to a syntax error: {e}")
+            logger.warning(
+                f"Could not parse {gcs_path} due to a syntax error: {e}"
+            )
         except Exception as e:
-            logger.error(f"An unexpected error occurred while processing {gcs_path}: {e}", exc_info=True)
-            
+            logger.error(
+                f"An unexpected error occurred while processing {gcs_path}: {e}",
+                exc_info=True,
+            )
+
     if file_count == 0:
         logger.warning(f"No Python (.py) files found in '{gcs_folder_uri}'.")
-        
+
     return sorted(list(unique_operators))
+
 
 # Local testing
 # if __name__ == "__main__":
 #     dags_gcs_path = "gs://input_dags/"
-    
+
 #     print(f"Searching for operators in: {dags_gcs_path}")
 #     operators = extract_operators_from_gcs(dags_gcs_path)
-    
+
 #     if operators:
 #         print("\n--- Unique Airflow Operators Found ---")
 #         for op in operators:

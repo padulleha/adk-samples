@@ -29,9 +29,17 @@ print(env_file_path)
 # Load environment variables from the specified .env file
 load_dotenv(dotenv_path=env_file_path)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
-def run_pipeline(gcs_folder_uri: str, source_version: str, target_version: str, project_id: str) -> str:
+
+def run_pipeline(
+    gcs_folder_uri: str,
+    source_version: str,
+    target_version: str,
+    project_id: str,
+) -> str:
     """
     Executes a sequential data pipeline to build a knowledge base from Airflow DAGs.
 
@@ -60,7 +68,7 @@ def run_pipeline(gcs_folder_uri: str, source_version: str, target_version: str, 
         operators=operators,
         source_version=source_version,
         target_version=target_version,
-        project_id=project_id
+        project_id=project_id,
     )
     print(f"Scraped documentation for {len(research_results)} operators.")
 
@@ -71,11 +79,14 @@ def run_pipeline(gcs_folder_uri: str, source_version: str, target_version: str, 
     completion_message = build_bq_corpus.generate_and_store_knowledge(
         research_results=research_results,
         source_version=source_version,
-        target_version=target_version
+        target_version=target_version,
     )
-    
-    print(f"Pipeline completed successfully, your knowledege base has been updated in {os.getenv('BIGQUERY_TABLE')}")
+
+    print(
+        f"Pipeline completed successfully, your knowledege base has been updated in {os.getenv('BIGQUERY_TABLE')}"
+    )
     return completion_message
+
 
 # if __name__ == '__main__':
 #     # Example usage of the pipeline function
@@ -83,6 +94,6 @@ def run_pipeline(gcs_folder_uri: str, source_version: str, target_version: str, 
 #     src_ver = "1.10.12"
 #     tgt_ver = "2.10.5"
 #     project_id = "<project-id>"
-    
+
 #     final_status = run_pipeline(gcs_uri, src_ver, tgt_ver, project_id)
 #     print(final_status)

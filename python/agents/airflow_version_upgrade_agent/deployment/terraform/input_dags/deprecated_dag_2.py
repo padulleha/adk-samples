@@ -16,39 +16,41 @@ from datetime import datetime
 from airflow import DAG
 from airflow.operators.dummy_operator import DummyOperator
 from airflow.contrib.operators.bigquery_operator import BigQueryOperator
-from airflow.contrib.operators.gcs_to_bq import GoogleCloudStorageToBigQueryOperator
+from airflow.contrib.operators.gcs_to_bq import (
+    GoogleCloudStorageToBigQueryOperator,
+)
 
 default_args = {
-    'owner': 'migration_test',
-    'depends_on_past': False,
-    'start_date': datetime(2023, 1, 1),
+    "owner": "migration_test",
+    "depends_on_past": False,
+    "start_date": datetime(2023, 1, 1),
 }
 
 dag = DAG(
-    'deprecated_dag_2',
+    "deprecated_dag_2",
     default_args=default_args,
-    schedule_interval='@daily',
+    schedule_interval="@daily",
     catchup=False,
 )
 
 start_task = DummyOperator(
-    task_id='start',
+    task_id="start",
     dag=dag,
 )
 
 load_data = GoogleCloudStorageToBigQueryOperator(
-    task_id='gcs_to_bq_load',
-    bucket='my-source-bucket',
-    source_objects=['data/sales.csv'],
-    destination_project_dataset_table='my_project.my_dataset.sales_table',
-    source_format='CSV',
-    write_disposition='WRITE_TRUNCATE',
+    task_id="gcs_to_bq_load",
+    bucket="my-source-bucket",
+    source_objects=["data/sales.csv"],
+    destination_project_dataset_table="my_project.my_dataset.sales_table",
+    source_format="CSV",
+    write_disposition="WRITE_TRUNCATE",
     dag=dag,
 )
 
 transform_data = BigQueryOperator(
-    task_id='bq_transform',
-    bql='SELECT * FROM `my_project.my_dataset.sales_table` LIMIT 100',
+    task_id="bq_transform",
+    bql="SELECT * FROM `my_project.my_dataset.sales_table` LIMIT 100",
     use_legacy_sql=False,
     dag=dag,
 )

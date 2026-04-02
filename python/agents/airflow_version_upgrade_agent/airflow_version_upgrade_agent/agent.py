@@ -28,7 +28,7 @@ knowledge_base_agent = LlmAgent(
     model=Gemini(model="gemini-2.5-pro"),
     description="A workflow to update the RAG knowledge base for Airflow migrations",
     instruction=prompts.KNOWLEDGE_BASE_AGENT_PROMPT,
-    tools=[knowledge_builder.run_pipeline]
+    tools=[knowledge_builder.run_pipeline],
 )
 
 # The main agent that interacts with the user
@@ -38,5 +38,5 @@ root_agent = LlmAgent(
     instruction=prompts.MIGRATION_ASSISTANT_PROMPT,
     model=Gemini(model="gemini-2.5-pro"),
     sub_agents=[knowledge_base_agent],
-    tools=[dag_converter.convert_dags]
+    tools=[dag_converter.convert_dags],
 )

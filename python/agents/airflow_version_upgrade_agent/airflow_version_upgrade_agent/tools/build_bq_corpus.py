@@ -39,8 +39,8 @@ BIGQUERY_TABLE = os.getenv("BIGQUERY_TABLE")
 BIGQUERY_TABLE_ID = f"{PROJECT_ID}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
 
 output_schema = {
-    "operator_path": "string", 
-    "source_version": "string", 
+    "operator_path": "string",
+    "source_version": "string",
     "target_version": "string",
     "is_deprecated": "boolean",
     "new_operator_path": "string",
@@ -54,7 +54,9 @@ output_schema = {
 
 bq_client = bigquery.Client(project=PROJECT_ID)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 _BQ_TABLE_VERIFIED = False
 
@@ -65,21 +67,31 @@ def ensure_bq_table_exists():
     """
     try:
         bq_client.get_table(BIGQUERY_TABLE_ID)
-        logging.info(f"Table {BIGQUERY_TABLE_ID} already exists. No action taken.")
+        logging.info(
+            f"Table {BIGQUERY_TABLE_ID} already exists. No action taken."
+        )
     except NotFound:
-        logging.warning(f"Table {BIGQUERY_TABLE_ID} not found. Proceeding to create it.")
+        logging.warning(
+            f"Table {BIGQUERY_TABLE_ID} not found. Proceeding to create it."
+        )
         try:
             # Create the dataset if it doesn't exist.
             dataset = bigquery.Dataset(f"{PROJECT_ID}.{BIGQUERY_DATASET}")
-            dataset.location = "US" # Or your preferred location
+            dataset.location = "US"  # Or your preferred location
             bq_client.create_dataset(dataset, exists_ok=True)
             logging.info(f"Dataset {BIGQUERY_DATASET} ensured.")
 
             # Define the schema and create the table
             schema = [
-                bigquery.SchemaField("operator_path", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("source_version", "STRING", mode="REQUIRED"),
-                bigquery.SchemaField("target_version", "STRING", mode="REQUIRED"),
+                bigquery.SchemaField(
+                    "operator_path", "STRING", mode="REQUIRED"
+                ),
+                bigquery.SchemaField(
+                    "source_version", "STRING", mode="REQUIRED"
+                ),
+                bigquery.SchemaField(
+                    "target_version", "STRING", mode="REQUIRED"
+                ),
                 bigquery.SchemaField("is_deprecated", "BOOLEAN"),
                 bigquery.SchemaField("new_operator_path", "STRING"),
                 bigquery.SchemaField("parameter_changes", "JSON"),
@@ -87,7 +99,9 @@ def ensure_bq_table_exists():
                 bigquery.SchemaField("code_example_before", "STRING"),
                 bigquery.SchemaField("code_example_after", "STRING"),
                 bigquery.SchemaField("source_urls", "STRING", mode="REPEATED"),
-                bigquery.SchemaField("created_at", "TIMESTAMP", mode="REQUIRED"),
+                bigquery.SchemaField(
+                    "created_at", "TIMESTAMP", mode="REQUIRED"
+                ),
             ]
             table = bigquery.Table(BIGQUERY_TABLE_ID, schema=schema)
             bq_client.create_table(table)
@@ -96,7 +110,9 @@ def ensure_bq_table_exists():
             logging.error(f"Error creating BigQuery dataset or table: {e}")
             raise
     except Exception as e:
-        logging.error(f"An unexpected error occurred while checking for table {BIGQUERY_TABLE_ID}: {e}")
+        logging.error(
+            f"An unexpected error occurred while checking for table {BIGQUERY_TABLE_ID}: {e}"
+        )
         raise
 
 
@@ -115,7 +131,7 @@ def generate_and_store_knowledge(
         str: A message indicating the completion of the knowledge base update.
     """
     global _BQ_TABLE_VERIFIED
-    
+
     if not _BQ_TABLE_VERIFIED:
         ensure_bq_table_exists()
         _BQ_TABLE_VERIFIED = True
@@ -125,7 +141,7 @@ def generate_and_store_knowledge(
         operator = result["operator"]
         scraped_text = result["content"]
         source_urls = result["urls"]
-        
+
         prompt = f"""
         You are an expert Airflow migration engineer. Your task is to analyze the provided text & URLs 
         and extract specific migration information for an Airflow operator.
@@ -143,34 +159,43 @@ def generate_and_store_knowledge(
         """
         try:
             response = client.models.generate_content(
-                model='gemini-2.5-pro',
-                contents=prompt
+                model="gemini-2.5-pro", contents=prompt
             )
-            json_str = response.text.strip().replace("```json", "").replace("```", "")
+            json_str = (
+                response.text.strip().replace("```json", "").replace("```", "")
+            )
             structured_data = json.loads(json_str)
 
             row_to_insert = {
-                "operator_path": operator, 
-                "source_version": source_version, 
+                "operator_path": operator,
+                "source_version": source_version,
                 "target_version": target_version,
                 "is_deprecated": structured_data.get("is_deprecated"),
                 "new_operator_path": structured_data.get("new_operator_path"),
-                "parameter_changes": json.dumps(structured_data.get("parameter_changes", {})),
+                "parameter_changes": json.dumps(
+                    structured_data.get("parameter_changes", {})
+                ),
                 "summary": structured_data.get("summary"),
-                "code_example_before": structured_data.get("code_example_before"),
+                "code_example_before": structured_data.get(
+                    "code_example_before"
+                ),
                 "code_example_after": structured_data.get("code_example_after"),
                 "source_urls": source_urls,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            
-            errors = bq_client.insert_rows_json(BIGQUERY_TABLE_ID, [row_to_insert]) 
+
+            errors = bq_client.insert_rows_json(
+                BIGQUERY_TABLE_ID, [row_to_insert]
+            )
             if errors:
                 raise Exception(f"BigQuery insertion errors: {errors}")
             logging.info(f"Successfully stored knowledge for {operator}")
 
         except Exception as e:
-            logging.error(f"Failed to process and store knowledge for {operator}: {e}")
-    
+            logging.error(
+                f"Failed to process and store knowledge for {operator}: {e}"
+            )
+
     return "Knowledge base update complete."
 
 
@@ -191,5 +216,3 @@ def generate_and_store_knowledge(
 #     scraped_content_dict = research_operator_documentation(operator_path, source_version, target_version, project_id)
 #     return_msg = generate_and_store_knowledge(scraped_content_dict, source_version, target_version)
 #     print(return_msg)
-
-    
