@@ -4,9 +4,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent)
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from invoice_processing.core.impact_assessor import (
     CaseMatch,

@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import ClassVar
 
 # Add parent package to path so imports work without installing
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent)
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from invoice_processing.shared_libraries.alf_engine import (
     ConditionEvaluator,

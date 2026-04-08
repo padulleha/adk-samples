@@ -6,9 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent)
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import invoice_processing.core.rule_writer as rw_module
 from invoice_processing.core.rule_writer import RuleWriterAgent

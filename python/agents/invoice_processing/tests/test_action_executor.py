@@ -3,9 +3,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent)
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from invoice_processing.shared_libraries.alf_engine import ActionExecutor
 
