@@ -38,16 +38,17 @@ Usage:
     revised_output, audit_log = engine.evaluate(provisional_output, case_context)
 """
 
-import os
-import sys
-import json
-import re
+import argparse
 import copy
-import time
+import json
 import logging
-from pathlib import Path
+import os
+import re
+import sys
+import time
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, ClassVar
 
 logger = logging.getLogger("ALF")
 
@@ -62,7 +63,9 @@ PROJECT_ROOT = AGENT_PKG_DIR.parent.parent.parent
 # ---------------------------------------------------------------------------
 # Master data loader (optional — provides domain-agnostic configuration)
 # ---------------------------------------------------------------------------
-sys.path.insert(0, str(SCRIPT_DIR))  # shared_libraries/ contains master_data_loader.py
+sys.path.insert(
+    0, str(SCRIPT_DIR)
+)  # shared_libraries/ contains master_data_loader.py
 try:
     from master_data_loader import load_master_data
 
@@ -267,7 +270,9 @@ class ConditionEvaluator:
             return False
 
         try:
-            return ConditionEvaluator._apply_operator(operator, actual, expected)
+            return ConditionEvaluator._apply_operator(
+                operator, actual, expected
+            )
         except Exception as e:
             logger.warning(
                 f"Condition evaluation error: {e} "
@@ -279,141 +284,15 @@ class ConditionEvaluator:
     @staticmethod
     def _apply_operator(operator: str, actual: Any, expected: Any) -> bool:
         """Core operator dispatch."""
-
-        # Null checks (don't need actual value)
-        if operator == "is_null":
-            return actual is None
-        if operator == "is_not_null":
-            return actual is not None
-
-        # Boolean checks
-        if operator == "is_true":
-            return bool(actual) is True
-        if operator == "is_false":
-            return not bool(actual)
-
-        # String operations (case-insensitive)
-        if operator == "equals":
-            if isinstance(actual, str) and isinstance(expected, str):
-                return actual.strip().lower() == expected.strip().lower()
-            return actual == expected
-
-        if operator == "not_equals":
-            if isinstance(actual, str) and isinstance(expected, str):
-                return actual.strip().lower() != expected.strip().lower()
-            return actual != expected
-
-        if operator == "contains":
-            if actual is None:
-                return False
-            return str(expected).lower() in str(actual).lower()
-
-        if operator == "not_contains":
-            if actual is None:
-                return True
-            return str(expected).lower() not in str(actual).lower()
-
-        if operator == "starts_with":
-            if actual is None:
-                return False
-            return str(actual).lower().startswith(str(expected).lower())
-
-        if operator == "in_list":
-            if isinstance(expected, list):
-                if isinstance(actual, str):
-                    return actual.lower() in [str(v).lower() for v in expected]
-                return actual in expected
-            return False
-
-        if operator == "not_in_list":
-            if isinstance(expected, list):
-                if isinstance(actual, str):
-                    return actual.lower() not in [str(v).lower() for v in expected]
-                return actual not in expected
-            return True
-
-        # Numeric comparisons
-        if operator in ("greater_than", "less_than", "greater_equal", "less_equal"):
-            try:
-                a = float(actual) if actual is not None else 0.0
-                e = float(expected) if expected is not None else 0.0
-            except (TypeError, ValueError):
-                return False
-            if operator == "greater_than":
-                return a > e
-            if operator == "less_than":
-                return a < e
-            if operator == "greater_equal":
-                return a >= e
-            if operator == "less_equal":
-                return a <= e
-
-        # Regex match
-        if operator == "regex_match":
-            if actual is None:
-                return False
-            return bool(re.search(str(expected), str(actual), re.IGNORECASE))
-
-        # Array/list operations
-        if operator == "any_item_contains":
-            if not isinstance(actual, list):
-                return False
-            search_patterns = str(expected).split("|")
-            for item in actual:
-                text_values = []
-                if isinstance(item, dict):
-                    text_values = [str(v).lower() for v in item.values()]
-                else:
-                    text_values = [str(item).lower()]
-                for text in text_values:
-                    for pattern in search_patterns:
-                        pattern = pattern.strip().lower()
-                        if not pattern:
-                            continue
-                        # Support \b word boundaries via regex
-                        if "\\b" in pattern or "(" in pattern:
-                            if re.search(pattern, text, re.IGNORECASE):
-                                return True
-                        elif pattern in text:
-                            return True
-            return False
-
-        # First word match (for vendor name comparisons)
-        if operator == "first_word_equals":
-            if actual is None or expected is None:
-                return False
-            skip = {
-                "PTY",
-                "LTD",
-                "LIMITED",
-                "THE",
-                "A",
-                "AN",
-                "AND",
-                "&",
-                "P/L",
-                "INC",
-                "CORP",
-                "OF",
-            }
-            actual_words = [w for w in str(actual).upper().split() if w not in skip]
-            expected_words = [w for w in str(expected).upper().split() if w not in skip]
-            if actual_words and expected_words:
-                return actual_words[0] == expected_words[0]
-            return False
-
-        # Length checks
-        if operator == "length_equals":
-            return len(actual or []) == int(expected)
-        if operator == "length_greater":
-            return len(actual or []) > int(expected)
-        if operator == "length_less":
-            return len(actual or []) < int(expected)
-
+        handler = _OPERATOR_DISPATCH.get(operator)
+        if handler is not None:
+            return handler(actual, expected)
         return False
 
     @staticmethod
-    def evaluate_all(data: dict, conditions: list[dict]) -> tuple[bool, list[dict]]:
+    def evaluate_all(
+        data: dict, conditions: list[dict]
+    ) -> tuple[bool, list[dict]]:
         """
         Evaluate all conditions (AND-joined).
 
@@ -449,6 +328,199 @@ class ConditionEvaluator:
         return all_passed, details
 
 
+# ---------------------------------------------------------------------------
+# Operator handler functions for ConditionEvaluator._apply_operator dispatch
+# ---------------------------------------------------------------------------
+
+
+def _op_is_null(actual: Any, _expected: Any) -> bool:
+    return actual is None
+
+
+def _op_is_not_null(actual: Any, _expected: Any) -> bool:
+    return actual is not None
+
+
+def _op_is_true(actual: Any, _expected: Any) -> bool:
+    return bool(actual) is True
+
+
+def _op_is_false(actual: Any, _expected: Any) -> bool:
+    return not bool(actual)
+
+
+def _op_equals(actual: Any, expected: Any) -> bool:
+    if isinstance(actual, str) and isinstance(expected, str):
+        return actual.strip().lower() == expected.strip().lower()
+    return actual == expected
+
+
+def _op_not_equals(actual: Any, expected: Any) -> bool:
+    if isinstance(actual, str) and isinstance(expected, str):
+        return actual.strip().lower() != expected.strip().lower()
+    return actual != expected
+
+
+def _op_contains(actual: Any, expected: Any) -> bool:
+    if actual is None:
+        return False
+    return str(expected).lower() in str(actual).lower()
+
+
+def _op_not_contains(actual: Any, expected: Any) -> bool:
+    if actual is None:
+        return True
+    return str(expected).lower() not in str(actual).lower()
+
+
+def _op_starts_with(actual: Any, expected: Any) -> bool:
+    if actual is None:
+        return False
+    return str(actual).lower().startswith(str(expected).lower())
+
+
+def _op_in_list(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, list):
+        if isinstance(actual, str):
+            return actual.lower() in [str(v).lower() for v in expected]
+        return actual in expected
+    return False
+
+
+def _op_not_in_list(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, list):
+        if isinstance(actual, str):
+            return actual.lower() not in [str(v).lower() for v in expected]
+        return actual not in expected
+    return True
+
+
+def _op_greater_than(actual: Any, expected: Any) -> bool:
+    try:
+        a = float(actual) if actual is not None else 0.0
+        e = float(expected) if expected is not None else 0.0
+        return a > e
+    except (TypeError, ValueError):
+        return False
+
+
+def _op_less_than(actual: Any, expected: Any) -> bool:
+    try:
+        a = float(actual) if actual is not None else 0.0
+        e = float(expected) if expected is not None else 0.0
+        return a < e
+    except (TypeError, ValueError):
+        return False
+
+
+def _op_greater_equal(actual: Any, expected: Any) -> bool:
+    try:
+        a = float(actual) if actual is not None else 0.0
+        e = float(expected) if expected is not None else 0.0
+        return a >= e
+    except (TypeError, ValueError):
+        return False
+
+
+def _op_less_equal(actual: Any, expected: Any) -> bool:
+    try:
+        a = float(actual) if actual is not None else 0.0
+        e = float(expected) if expected is not None else 0.0
+        return a <= e
+    except (TypeError, ValueError):
+        return False
+
+
+def _op_regex_match(actual: Any, expected: Any) -> bool:
+    if actual is None:
+        return False
+    return bool(re.search(str(expected), str(actual), re.IGNORECASE))
+
+
+def _op_any_item_contains(actual: Any, expected: Any) -> bool:
+    if not isinstance(actual, list):
+        return False
+    search_patterns = str(expected).split("|")
+    for item in actual:
+        if isinstance(item, dict):
+            text_values = [str(v).lower() for v in item.values()]
+        else:
+            text_values = [str(item).lower()]
+        for text in text_values:
+            for raw_pattern in search_patterns:
+                normalized = raw_pattern.strip().lower()
+                if not normalized:
+                    continue
+                # Support \b word boundaries via regex
+                if "\\b" in normalized or "(" in normalized:
+                    if re.search(normalized, text, re.IGNORECASE):
+                        return True
+                elif normalized in text:
+                    return True
+    return False
+
+
+def _op_first_word_equals(actual: Any, expected: Any) -> bool:
+    if actual is None or expected is None:
+        return False
+    skip = {
+        "PTY",
+        "LTD",
+        "LIMITED",
+        "THE",
+        "A",
+        "AN",
+        "AND",
+        "&",
+        "P/L",
+        "INC",
+        "CORP",
+        "OF",
+    }
+    actual_words = [w for w in str(actual).upper().split() if w not in skip]
+    expected_words = [w for w in str(expected).upper().split() if w not in skip]
+    if actual_words and expected_words:
+        return actual_words[0] == expected_words[0]
+    return False
+
+
+def _op_length_equals(actual: Any, expected: Any) -> bool:
+    return len(actual or []) == int(expected)
+
+
+def _op_length_greater(actual: Any, expected: Any) -> bool:
+    return len(actual or []) > int(expected)
+
+
+def _op_length_less(actual: Any, expected: Any) -> bool:
+    return len(actual or []) < int(expected)
+
+
+_OPERATOR_DISPATCH: dict[str, Any] = {
+    "is_null": _op_is_null,
+    "is_not_null": _op_is_not_null,
+    "is_true": _op_is_true,
+    "is_false": _op_is_false,
+    "equals": _op_equals,
+    "not_equals": _op_not_equals,
+    "contains": _op_contains,
+    "not_contains": _op_not_contains,
+    "starts_with": _op_starts_with,
+    "in_list": _op_in_list,
+    "not_in_list": _op_not_in_list,
+    "greater_than": _op_greater_than,
+    "less_than": _op_less_than,
+    "greater_equal": _op_greater_equal,
+    "less_equal": _op_less_equal,
+    "regex_match": _op_regex_match,
+    "any_item_contains": _op_any_item_contains,
+    "first_word_equals": _op_first_word_equals,
+    "length_equals": _op_length_equals,
+    "length_greater": _op_length_greater,
+    "length_less": _op_length_less,
+}
+
+
 # ============================================================================
 # ACTION EXECUTOR
 # ============================================================================
@@ -465,7 +537,9 @@ class ActionExecutor:
     """
 
     @staticmethod
-    def execute(output: dict, action: dict, context: dict = None) -> dict:
+    def execute(
+        output: dict, action: dict, context: dict | None = None
+    ) -> dict:
         """
         Execute a single action on the output.
 
@@ -482,8 +556,6 @@ class ActionExecutor:
             Modified output dict
         """
         action_type = action.get("type", "")
-        target = action.get("target", "")
-        value = action.get("value")
 
         if action_type not in SUPPORTED_ACTION_TYPES:
             logger.warning(f"Unsupported action type: {action_type}")
@@ -496,25 +568,23 @@ class ActionExecutor:
         if action_type == "llm_patch_fields":
             return LLMActionExecutor.execute_patch(output, action, context)
 
-        if action_type == "set_field":
-            ActionExecutor._set_field(output, target, value)
+        ActionExecutor._execute_deterministic(output, action, context)
+        return output
 
-        elif action_type == "set_nested_field":
+    @staticmethod
+    def _execute_deterministic(
+        output: dict, action: dict, context: dict | None
+    ) -> None:
+        """Execute a deterministic (non-LLM) action on the output."""
+        action_type = action.get("type", "")
+        target = action.get("target", "")
+        value = action.get("value")
+
+        if action_type in ("set_field", "set_nested_field"):
             ActionExecutor._set_field(output, target, value)
 
         elif action_type == "override_decision":
-            ActionExecutor._set_field(output, "decision", value)
-            status_map = {
-                "ACCEPT": "Pending payment",
-                "REJECT": "Rejected",
-                "SET_ASIDE": "To verify",
-                "CONTINUE": "To verify",
-                "EMAIL_APPROVER": "To verify",
-            }
-            if value in status_map:
-                ActionExecutor._set_field(
-                    output, "Invoice Processing.Invoice Status", status_map[value]
-                )
+            ActionExecutor._apply_override_decision(output, value)
 
         elif action_type == "override_validation":
             ActionExecutor._override_validation_step(output, action)
@@ -530,14 +600,32 @@ class ActionExecutor:
 
         elif action_type == "append_note":
             current = ConditionEvaluator.resolve_field(output, target) or ""
-            ActionExecutor._set_field(output, target, f"{current} {value}".strip())
+            ActionExecutor._set_field(
+                output, target, f"{current} {value}".strip()
+            )
 
         elif action_type == "conditional_set":
             sub_condition = action.get("condition", {})
-            if ConditionEvaluator.evaluate_single(context or output, sub_condition):
+            if ConditionEvaluator.evaluate_single(
+                context or output, sub_condition
+            ):
                 ActionExecutor._set_field(output, target, value)
 
-        return output
+    @staticmethod
+    def _apply_override_decision(output: dict, value: Any) -> None:
+        """Apply a decision override with corresponding status mapping."""
+        ActionExecutor._set_field(output, "decision", value)
+        status_map = {
+            "ACCEPT": "Pending payment",
+            "REJECT": "Rejected",
+            "SET_ASIDE": "To verify",
+            "CONTINUE": "To verify",
+            "EMAIL_APPROVER": "To verify",
+        }
+        if value in status_map:
+            ActionExecutor._set_field(
+                output, "Invoice Processing.Invoice Status", status_map[value]
+            )
 
     @staticmethod
     def _set_field(data: dict, field_path: str, value: Any):
@@ -561,9 +649,9 @@ class ActionExecutor:
         new_template = action.get("rejection_template")
 
         # Search through all phase validation artifacts
-        for key in output:
-            if isinstance(output[key], dict) and "validations" in output[key]:
-                validations = output[key]["validations"]
+        for _key, value in output.items():
+            if isinstance(value, dict) and "validations" in value:
+                validations = value["validations"]
                 if isinstance(validations, list):
                     for v in validations:
                         if isinstance(v, dict) and v.get("step") == step_number:
@@ -581,7 +669,9 @@ class ActionExecutor:
 
         if formula == "sum_line_items_ex_gst":
             items = (
-                ConditionEvaluator.resolve_field(context or output, "line_items_mapped")
+                ConditionEvaluator.resolve_field(
+                    context or output, "line_items_mapped"
+                )
                 or []
             )
             total = sum(
@@ -599,7 +689,9 @@ class ActionExecutor:
                 or "0"
             )
             pretax = float(
-                ConditionEvaluator.resolve_field(output, "Invoice Details.Pretax total")
+                ConditionEvaluator.resolve_field(
+                    output, "Invoice Details.Pretax total"
+                )
                 or "0"
             )
             ActionExecutor._set_field(output, target, f"{total - pretax:,.2f}")
@@ -826,8 +918,11 @@ class LLMActionExecutor:
         """Lazy-initialize the Vertex AI GenerativeModel."""
         if cls._model is None:
             try:
-                from google.cloud import aiplatform
-                from vertexai.generative_models import GenerativeModel, GenerationConfig
+                from google.cloud import aiplatform  # noqa: PLC0415
+                from vertexai.generative_models import (  # noqa: PLC0415
+                    GenerationConfig,
+                    GenerativeModel,
+                )
 
                 if not LLM_PROJECT_ID:
                     raise ValueError(
@@ -846,7 +941,7 @@ class LLMActionExecutor:
                 raise ImportError(
                     "Vertex AI SDK required for LLM actions. Install with: "
                     "pip install google-cloud-aiplatform"
-                )
+                ) from None
         return cls._model
 
     @staticmethod
@@ -892,7 +987,9 @@ class LLMActionExecutor:
             currency=currency,
         )
 
-        full_prompt = f"{LLM_CONTINUE_SYSTEM_PROMPT}\n\n===TASK===\n{task_prompt}"
+        full_prompt = (
+            f"{LLM_CONTINUE_SYSTEM_PROMPT}\n\n===TASK===\n{task_prompt}"
+        )
 
         # Call Gemini Pro
         logger.info(
@@ -939,7 +1036,9 @@ class LLMActionExecutor:
             logger.error(f"[LLM] {rule_id} failed: {e}")
             # On LLM failure, fall back to deterministic patch
             # (flip status + add error note)
-            output.setdefault("Invoice Processing", {})["Invoice Status"] = "To verify"
+            output.setdefault("Invoice Processing", {})["Invoice Status"] = (
+                "To verify"
+            )
             memo_key = output.setdefault("Notes and Texts", {})
             existing = memo_key.get("Asset specialist memo", "")
             memo_key["Asset specialist memo"] = (
@@ -1005,7 +1104,9 @@ class LLMActionExecutor:
             rule_name=rule_name,
             patch_context=patch_context,
             target_fields_list=target_fields_list,
-            current_values_json=json.dumps(current_values, indent=2, default=str),
+            current_values_json=json.dumps(
+                current_values, indent=2, default=str
+            ),
             invoice_json=json.dumps(invoice, indent=2, default=str),
             waf_json=json.dumps(waf, indent=2, default=str),
             current_output_json=json.dumps(output, indent=2, default=str),
@@ -1076,7 +1177,9 @@ class LLMActionExecutor:
         except Exception as e:
             logger.error(f"[LLM-PATCH] {rule_id} failed: {e}")
             # On LLM failure, fall back: mark for manual review
-            output.setdefault("Invoice Processing", {})["Invoice Status"] = "To verify"
+            output.setdefault("Invoice Processing", {})["Invoice Status"] = (
+                "To verify"
+            )
             memo_key = output.setdefault("Notes and Texts", {})
             existing = memo_key.get("Asset specialist memo", "")
             memo_key["Asset specialist memo"] = (
@@ -1100,24 +1203,36 @@ class LLMActionExecutor:
         Handles markdown code blocks and trailing text.
         """
         text = response_text.strip()
+        text = LLMActionExecutor._strip_markdown_code_block(text)
+        json_str = LLMActionExecutor._extract_json_object(text)
 
-        # Remove markdown code blocks
-        if text.startswith("```"):
-            lines = text.split("\n")
-            json_lines = []
-            in_block = False
-            for line in lines:
-                if line.strip().startswith("```"):
-                    if in_block:
-                        break
-                    in_block = True
-                    continue
-                elif in_block:
-                    json_lines.append(line)
-            if json_lines:
-                text = "\n".join(json_lines).strip()
+        # Fix trailing commas
+        json_str = re.sub(r",(\s*[}\]])", r"\1", json_str)
+        return json.loads(json_str)
 
-        # Find JSON object
+    @staticmethod
+    def _strip_markdown_code_block(text: str) -> str:
+        """Remove markdown code block fencing if present."""
+        if not text.startswith("```"):
+            return text
+        lines = text.split("\n")
+        json_lines = []
+        in_block = False
+        for line in lines:
+            if line.strip().startswith("```"):
+                if in_block:
+                    break
+                in_block = True
+                continue
+            elif in_block:
+                json_lines.append(line)
+        if json_lines:
+            return "\n".join(json_lines).strip()
+        return text
+
+    @staticmethod
+    def _extract_json_object(text: str) -> str:
+        """Find and extract the outermost JSON object from text."""
         start = text.find("{")
         if start == -1:
             raise ValueError("No JSON object found in LLM response")
@@ -1136,12 +1251,7 @@ class LLMActionExecutor:
         if end == -1:
             raise ValueError("Unclosed JSON object in LLM response")
 
-        json_str = text[start:end]
-
-        # Fix trailing commas
-        json_str = re.sub(r",(\s*[}\]])", r"\1", json_str)
-
-        return json.loads(json_str)
+        return text[start:end]
 
 
 # ============================================================================
@@ -1166,13 +1276,23 @@ class RuleAggregator:
     """
 
     # Resume point ordering (earlier = more work for LLM to redo)
-    RESUME_ORDER = {"phase2": 0, "phase3": 1, "phase4": 2, "transformer": 3}
+    RESUME_ORDER: ClassVar[dict[str, int]] = {
+        "phase2": 0,
+        "phase3": 1,
+        "phase4": 2,
+        "transformer": 3,
+    }
 
     # LLM action types (for categorization)
-    LLM_ACTION_TYPES = {"llm_continue_processing", "llm_patch_fields"}
+    LLM_ACTION_TYPES: ClassVar[set[str]] = {
+        "llm_continue_processing",
+        "llm_patch_fields",
+    }
 
     @staticmethod
-    def collect(rules: list, context: dict) -> tuple[list[tuple], list[dict], dict]:
+    def collect(
+        rules: list, context: dict
+    ) -> tuple[list[tuple], list[dict], dict]:
         """
         Phase 1: Evaluate all rules and collect matches.
 
@@ -1235,7 +1355,9 @@ class RuleAggregator:
                         matched_rules.append((rule, eval_details))
                         scope_matches[scope] = rule.id
                         rule_trace["applied"] = True
-                        logger.info(f"  [ALF] Rule {rule.id} matched: {rule.name}")
+                        logger.info(
+                            f"  [ALF] Rule {rule.id} matched: {rule.name}"
+                        )
                 else:
                     rule_trace["reason"] = "Conditions not met"
 
@@ -1264,9 +1386,41 @@ class RuleAggregator:
             RevisionPlan dict with pipeline_continuation, field_patches,
             deterministic_edits keys
         """
-        continuations = []
-        patches = []
-        deterministic = []
+        continuations, patches, deterministic = (
+            RuleAggregator._categorize_actions(matched_rules)
+        )
+
+        merged_continuation = RuleAggregator._merge_continuations(continuations)
+        merged_patches = RuleAggregator._merge_patches(patches)
+
+        plan = {
+            "pipeline_continuation": merged_continuation,
+            "field_patches": merged_patches,
+            "deterministic_edits": deterministic,
+            "total_rules_aggregated": len(matched_rules),
+            "execution_order": [],
+        }
+
+        # Build execution order for transparency
+        RuleAggregator._build_execution_order(
+            plan,
+            merged_continuation,
+            merged_patches,
+            deterministic,
+            continuations,
+            patches,
+        )
+
+        return plan
+
+    @staticmethod
+    def _categorize_actions(
+        matched_rules: list[tuple],
+    ) -> tuple[list[dict], list[dict], list[dict]]:
+        """Categorize matched rule actions into continuations, patches, and deterministic."""
+        continuations: list[dict] = []
+        patches: list[dict] = []
+        deterministic: list[dict] = []
 
         for rule, _eval_details in matched_rules:
             for action in rule.actions:
@@ -1278,10 +1432,11 @@ class RuleAggregator:
                             "rule_id": rule.id,
                             "rule_name": rule.name,
                             "resume_from": action.get("resume_from", "phase2"),
-                            "correction_context": action.get("correction_context", ""),
+                            "correction_context": action.get(
+                                "correction_context", ""
+                            ),
                         }
                     )
-
                 elif action_type == "llm_patch_fields":
                     patches.append(
                         {
@@ -1291,7 +1446,6 @@ class RuleAggregator:
                             "patch_context": action.get("patch_context", ""),
                         }
                     )
-
                 else:
                     deterministic.append(
                         {
@@ -1300,88 +1454,96 @@ class RuleAggregator:
                         }
                     )
 
-        # --- Merge continuations ---
-        merged_continuation = None
-        if continuations:
-            # Pick earliest resume_from (most pipeline steps to redo)
-            continuations.sort(
-                key=lambda c: RuleAggregator.RESUME_ORDER.get(c["resume_from"], 99)
+        return continuations, patches, deterministic
+
+    @staticmethod
+    def _merge_continuations(continuations: list[dict]) -> dict | None:
+        """Merge multiple continuation actions into one (earliest resume_from wins)."""
+        if not continuations:
+            return None
+
+        continuations.sort(
+            key=lambda c: RuleAggregator.RESUME_ORDER.get(c["resume_from"], 99)
+        )
+        earliest = continuations[0]["resume_from"]
+
+        combined_context_parts = []
+        source_rules = []
+        for c in continuations:
+            source_rules.append(
+                {
+                    "rule_id": c["rule_id"],
+                    "rule_name": c["rule_name"],
+                    "original_resume_from": c["resume_from"],
+                }
             )
-            earliest = continuations[0]["resume_from"]
+            combined_context_parts.append(
+                f"[{c['rule_id']}] {c['correction_context']}"
+            )
 
-            # Combine correction contexts from all matching rules
-            combined_context_parts = []
-            source_rules = []
-            for c in continuations:
-                source_rules.append(
-                    {
-                        "rule_id": c["rule_id"],
-                        "rule_name": c["rule_name"],
-                        "original_resume_from": c["resume_from"],
-                    }
-                )
-                combined_context_parts.append(
-                    f"[{c['rule_id']}] {c['correction_context']}"
-                )
-
-            merged_continuation = {
-                "type": "llm_continue_processing",
-                "resume_from": earliest,
-                "correction_context": "\n\n".join(combined_context_parts),
-                "source_rules": source_rules,
-                "rules_merged": len(continuations),
-            }
-
-        # --- Merge field patches ---
-        merged_patches = None
-        if patches:
-            # Union all target fields (deduplicated, order preserved)
-            seen_fields = set()
-            all_target_fields = []
-            for p in patches:
-                for field in p["target_fields"]:
-                    if field not in seen_fields:
-                        seen_fields.add(field)
-                        all_target_fields.append(field)
-
-            # Combine patch contexts
-            combined_patch_parts = []
-            source_rules = []
-            for p in patches:
-                source_rules.append(
-                    {
-                        "rule_id": p["rule_id"],
-                        "rule_name": p["rule_name"],
-                    }
-                )
-                combined_patch_parts.append(f"[{p['rule_id']}] {p['patch_context']}")
-
-            merged_patches = {
-                "type": "llm_patch_fields",
-                "target_fields": all_target_fields,
-                "patch_context": "\n\n".join(combined_patch_parts),
-                "source_rules": source_rules,
-                "rules_merged": len(patches),
-            }
-
-        plan = {
-            "pipeline_continuation": merged_continuation,
-            "field_patches": merged_patches,
-            "deterministic_edits": deterministic,
-            "total_rules_aggregated": len(matched_rules),
-            "execution_order": [],
+        return {
+            "type": "llm_continue_processing",
+            "resume_from": earliest,
+            "correction_context": "\n\n".join(combined_context_parts),
+            "source_rules": source_rules,
+            "rules_merged": len(continuations),
         }
 
-        # Build execution order for transparency
+    @staticmethod
+    def _merge_patches(patches: list[dict]) -> dict | None:
+        """Merge multiple patch actions into one (union of target fields)."""
+        if not patches:
+            return None
+
+        seen_fields: set[str] = set()
+        all_target_fields: list[str] = []
+        for p in patches:
+            for field in p["target_fields"]:
+                if field not in seen_fields:
+                    seen_fields.add(field)
+                    all_target_fields.append(field)
+
+        combined_patch_parts = []
+        source_rules = []
+        for p in patches:
+            source_rules.append(
+                {
+                    "rule_id": p["rule_id"],
+                    "rule_name": p["rule_name"],
+                }
+            )
+            combined_patch_parts.append(
+                f"[{p['rule_id']}] {p['patch_context']}"
+            )
+
+        return {
+            "type": "llm_patch_fields",
+            "target_fields": all_target_fields,
+            "patch_context": "\n\n".join(combined_patch_parts),
+            "source_rules": source_rules,
+            "rules_merged": len(patches),
+        }
+
+    @staticmethod
+    def _build_execution_order(
+        plan: dict,
+        merged_continuation: dict | None,
+        merged_patches: dict | None,
+        deterministic: list[dict],
+        continuations: list[dict],
+        patches: list[dict],
+    ) -> None:
+        """Populate the execution_order list in the plan for transparency."""
         if merged_continuation:
             plan["execution_order"].append(
-                f"1. llm_continue_processing (resume_from={earliest}, "
+                f"1. llm_continue_processing "
+                f"(resume_from={merged_continuation['resume_from']}, "
                 f"{len(continuations)} rules merged)"
             )
         if merged_patches:
             plan["execution_order"].append(
                 f"{'2' if merged_continuation else '1'}. llm_patch_fields "
-                f"({len(all_target_fields)} fields, "
+                f"({len(merged_patches['target_fields'])} fields, "
                 f"{len(patches)} rules merged)"
             )
         if deterministic:
@@ -1389,8 +1551,6 @@ class RuleAggregator:
             plan["execution_order"].append(
                 f"{step}. deterministic_edits ({len(deterministic)} actions)"
             )
-
-        return plan
 
     @staticmethod
     def execute_plan(
@@ -1427,7 +1587,9 @@ class RuleAggregator:
             # Inject combined rule metadata
             action = {
                 **continuation,
-                "rule_id": "+".join(r["rule_id"] for r in continuation["source_rules"]),
+                "rule_id": "+".join(
+                    r["rule_id"] for r in continuation["source_rules"]
+                ),
                 "rule_name": " + ".join(
                     r["rule_name"] for r in continuation["source_rules"]
                 ),
@@ -1465,7 +1627,9 @@ class RuleAggregator:
 
             action = {
                 **patches,
-                "rule_id": "+".join(r["rule_id"] for r in patches["source_rules"]),
+                "rule_id": "+".join(
+                    r["rule_id"] for r in patches["source_rules"]
+                ),
                 "rule_name": " + ".join(
                     r["rule_name"] for r in patches["source_rules"]
                 ),
@@ -1486,7 +1650,9 @@ class RuleAggregator:
                     "step": 2,
                     "action_type": "llm_patch_fields",
                     "target_fields": patches["target_fields"],
-                    "source_rules": [r["rule_id"] for r in patches["source_rules"]],
+                    "source_rules": [
+                        r["rule_id"] for r in patches["source_rules"]
+                    ],
                     "rules_merged": patches["rules_merged"],
                     "before_values": before_values,
                     "after_values": after_values,
@@ -1496,9 +1662,11 @@ class RuleAggregator:
         # --- Step 3: Deterministic edits ---
         det_edits = plan.get("deterministic_edits", [])
         if det_edits:
-            logger.info(f"  [AGG] Executing {len(det_edits)} deterministic edits")
+            logger.info(
+                f"  [AGG] Executing {len(det_edits)} deterministic edits"
+            )
 
-            for i, action in enumerate(det_edits):
+            for _i, action in enumerate(det_edits):
                 target = action.get("target", "")
                 before = (
                     ConditionEvaluator.resolve_field(revised, target)
@@ -1561,9 +1729,7 @@ class Rule:
 
     def __repr__(self):
         status = "ON" if self.enabled else "OFF"
-        return (
-            f"Rule({self.id}, scope={self.scope}, priority={self.priority}, {status})"
-        )
+        return f"Rule({self.id}, scope={self.scope}, priority={self.priority}, {status})"
 
 
 # ============================================================================
@@ -1587,7 +1753,7 @@ class ALFEngine:
       5. Priority-ordered: Rules evaluated in priority order within scope
     """
 
-    def __init__(self, rule_base_path: str | Path = None):
+    def __init__(self, rule_base_path: str | Path | None = None):
         self.rules: list[Rule] = []
         self.schema_version = SCHEMA_VERSION
         self._rule_base_metadata = {}
@@ -1610,7 +1776,7 @@ class ALFEngine:
         if not path.exists():
             raise FileNotFoundError(f"Rule base not found: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = json.load(f)
 
         # Validate schema
@@ -1644,43 +1810,56 @@ class ALFEngine:
             raise ValueError("'rules' must be a list")
 
         for i, rule in enumerate(raw["rules"]):
-            if "id" not in rule:
-                raise ValueError(f"Rule at index {i} missing 'id'")
-            if "conditions" not in rule:
-                raise ValueError(f"Rule '{rule.get('id')}' missing 'conditions'")
-            if "actions" not in rule:
-                raise ValueError(f"Rule '{rule.get('id')}' missing 'actions'")
+            self._validate_rule_structure(i, rule)
+            self._validate_rule_conditions(rule)
+            self._validate_rule_actions(rule)
 
-            # Validate conditions
-            for j, cond in enumerate(rule["conditions"]):
-                if "field" not in cond:
-                    raise ValueError(
-                        f"Rule '{rule['id']}' condition {j} missing 'field'"
-                    )
-                if "operator" not in cond:
-                    raise ValueError(
-                        f"Rule '{rule['id']}' condition {j} missing 'operator'"
-                    )
-                op = cond["operator"]
-                if op not in SUPPORTED_CONDITION_OPERATORS:
-                    raise ValueError(
-                        f"Rule '{rule['id']}' condition {j}: "
-                        f"unsupported operator '{op}'"
-                    )
+    @staticmethod
+    def _validate_rule_structure(index: int, rule: dict) -> None:
+        """Validate that a rule has required top-level keys."""
+        if "id" not in rule:
+            raise ValueError(f"Rule at index {index} missing 'id'")
+        if "conditions" not in rule:
+            raise ValueError(f"Rule '{rule.get('id')}' missing 'conditions'")
+        if "actions" not in rule:
+            raise ValueError(f"Rule '{rule.get('id')}' missing 'actions'")
 
-            # Validate actions
-            for j, act in enumerate(rule["actions"]):
-                if "type" not in act:
-                    raise ValueError(f"Rule '{rule['id']}' action {j} missing 'type'")
-                at = act["type"]
-                if at not in SUPPORTED_ACTION_TYPES:
-                    raise ValueError(
-                        f"Rule '{rule['id']}' action {j}: "
-                        f"unsupported action type '{at}'"
-                    )
+    @staticmethod
+    def _validate_rule_conditions(rule: dict) -> None:
+        """Validate all conditions in a rule."""
+        for j, cond in enumerate(rule["conditions"]):
+            if "field" not in cond:
+                raise ValueError(
+                    f"Rule '{rule['id']}' condition {j} missing 'field'"
+                )
+            if "operator" not in cond:
+                raise ValueError(
+                    f"Rule '{rule['id']}' condition {j} missing 'operator'"
+                )
+            op = cond["operator"]
+            if op not in SUPPORTED_CONDITION_OPERATORS:
+                raise ValueError(
+                    f"Rule '{rule['id']}' condition {j}: "
+                    f"unsupported operator '{op}'"
+                )
+
+    @staticmethod
+    def _validate_rule_actions(rule: dict) -> None:
+        """Validate all actions in a rule."""
+        for j, act in enumerate(rule["actions"]):
+            if "type" not in act:
+                raise ValueError(
+                    f"Rule '{rule['id']}' action {j} missing 'type'"
+                )
+            at = act["type"]
+            if at not in SUPPORTED_ACTION_TYPES:
+                raise ValueError(
+                    f"Rule '{rule['id']}' action {j}: "
+                    f"unsupported action type '{at}'"
+                )
 
     def evaluate(
-        self, provisional_output: dict, case_context: dict = None
+        self, provisional_output: dict, case_context: dict | None = None
     ) -> tuple[dict, dict]:
         """
         Evaluate all rules against the provisional output using the
@@ -1733,12 +1912,16 @@ class ALFEngine:
         # ---- Phase 3: EXECUTE ----
         execution_log = []
         if plan["total_rules_aggregated"] > 0:
-            revised, execution_log = RuleAggregator.execute_plan(plan, revised, context)
+            revised, execution_log = RuleAggregator.execute_plan(
+                plan, revised, context
+            )
 
         # Build audit log
         audit = {
             "alf_version": SCHEMA_VERSION,
-            "rule_base_version": self._rule_base_metadata.get("version", "unknown"),
+            "rule_base_version": self._rule_base_metadata.get(
+                "version", "unknown"
+            ),
             "evaluation_timestamp": datetime.now().isoformat(),
             "total_rules_evaluated": len(all_traces),
             "rules_matched": len(matched_rules),
@@ -1894,14 +2077,14 @@ class ActingAgentAdapter:
     @staticmethod
     def build_case_context(
         output_folder: Path,
-        extraction: dict = None,
-        phase1: dict = None,
-        phase2: dict = None,
-        phase3: dict = None,
-        phase4: dict = None,
-        transformer: dict = None,
-        exceptions: dict = None,
-        postprocessing: dict = None,
+        extraction: dict | None = None,
+        phase1: dict | None = None,
+        phase2: dict | None = None,
+        phase3: dict | None = None,
+        phase4: dict | None = None,
+        transformer: dict | None = None,
+        exceptions: dict | None = None,
+        postprocessing: dict | None = None,
     ) -> dict:
         """
         Build a unified case context from all agent artifacts.
@@ -1912,37 +2095,46 @@ class ActingAgentAdapter:
         context = {}
 
         # Load from output folder if individual dicts not provided
-        if output_folder and output_folder.exists():
-            artifact_map = _get_artifact_map()
-
-            for key, filename in artifact_map.items():
-                filepath = output_folder / filename
-                if filepath.exists():
-                    try:
-                        with open(filepath, "r") as f:
-                            context[key] = json.load(f)
-                    except json.JSONDecodeError:
-                        context[key] = {}
+        ActingAgentAdapter._load_artifacts_from_folder(context, output_folder)
 
         # Override with explicitly provided dicts
-        if extraction:
-            context["extraction"] = extraction
-        if phase1:
-            context["phase1"] = phase1
-        if phase2:
-            context["phase2"] = phase2
-        if phase3:
-            context["phase3"] = phase3
-        if phase4:
-            context["phase4"] = phase4
-        if transformer:
-            context["transformer"] = transformer
-        if exceptions:
-            context["exceptions"] = exceptions
-        if postprocessing:
-            context["postprocessing"] = postprocessing
+        overrides = {
+            "extraction": extraction,
+            "phase1": phase1,
+            "phase2": phase2,
+            "phase3": phase3,
+            "phase4": phase4,
+            "transformer": transformer,
+            "exceptions": exceptions,
+            "postprocessing": postprocessing,
+        }
+        for key, value in overrides.items():
+            if value:
+                context[key] = value
 
         # Extract commonly-accessed fields to top level for convenience
+        ActingAgentAdapter._promote_convenience_fields(context)
+
+        return context
+
+    @staticmethod
+    def _load_artifacts_from_folder(context: dict, output_folder: Path) -> None:
+        """Load agent artifacts from the output folder into context."""
+        if not output_folder or not output_folder.exists():
+            return
+        artifact_map = _get_artifact_map()
+        for key, filename in artifact_map.items():
+            filepath = output_folder / filename
+            if filepath.exists():
+                try:
+                    with open(filepath) as f:
+                        context[key] = json.load(f)
+                except json.JSONDecodeError:
+                    context[key] = {}
+
+    @staticmethod
+    def _promote_convenience_fields(context: dict) -> None:
+        """Promote commonly-accessed nested fields to the top level."""
         if "extraction" in context:
             ext = context["extraction"]
             context["invoice"] = ext.get("invoice", {})
@@ -1967,8 +2159,6 @@ class ActingAgentAdapter:
             context["line_items_mapped"] = context["transformer"].get(
                 "line_items_mapped", []
             )
-
-        return context
 
     @staticmethod
     def apply_to_postprocessing(
@@ -1995,7 +2185,9 @@ class ActingAgentAdapter:
             result = copy.deepcopy(revised_output)
 
             # Add ALF audit trail to outcome message
-            rules_applied = [r["rule_id"] for r in audit_log.get("rules_applied", [])]
+            rules_applied = [
+                r["rule_id"] for r in audit_log.get("rules_applied", [])
+            ]
             alf_note = f" [ALF corrections applied: {', '.join(rules_applied)}]"
 
             outcome = result.get("Outcome Message", {})
@@ -2027,9 +2219,9 @@ def _snapshot_target(data: dict, action: dict) -> Any:
 def run_alf_on_case(
     rule_base_path: str | Path,
     output_folder: str | Path,
-    postprocessing_path: str | Path = None,
+    postprocessing_path: str | Path | None = None,
     save_to_alf_out: bool = True,
-    engine: "ALFEngine" = None,
+    engine: "ALFEngine | None" = None,
 ) -> tuple[dict, dict]:
     """
     Run ALF on a single case and save revised output to ALF/out/{case_id}/.
@@ -2061,7 +2253,7 @@ def run_alf_on_case(
     postprocessing = {}
     pp_path = Path(postprocessing_path)
     if pp_path.exists():
-        with open(pp_path, "r") as f:
+        with open(pp_path) as f:
             postprocessing = json.load(f)
 
     # Merge postprocessing into context
@@ -2104,10 +2296,8 @@ def run_alf_on_case(
 # ============================================================================
 
 
-def main():
-    """CLI entry point for running ALF on cases."""
-    import argparse
-
+def _parse_cli_args() -> argparse.Namespace:
+    """Parse CLI arguments for the ALF engine."""
     parser = argparse.ArgumentParser(
         description="ALF Engine - Adaptive Learning Framework (Phase 1)"
     )
@@ -2147,124 +2337,107 @@ def main():
         help="Validate rule base consistency and exit",
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="Evaluate rules but don't save output"
+        "--dry-run",
+        action="store_true",
+        help="Evaluate rules but don't save output",
     )
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
-    # Setup logging
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s"
-    )
+def _run_validate_mode(engine: ALFEngine) -> None:
+    """Run rule base validation and print results."""
+    issues = engine.validate_rule_base_consistency()
+    if issues:
+        print(f"\nFound {len(issues)} issue(s):")
+        for issue in issues:
+            print(
+                f"  [{issue['type'].upper()}] {issue['rule_id']}: "
+                f"{issue['message']}"
+            )
+    else:
+        print("Rule base is consistent. No issues found.")
 
-    rule_base_path = Path(args.rule_base)
 
-    # Load engine once (reused for all cases)
-    engine = ALFEngine(rule_base_path)
-
-    # Validate mode
-    if args.validate:
-        issues = engine.validate_rule_base_consistency()
-        if issues:
-            print(f"\nFound {len(issues)} issue(s):")
-            for issue in issues:
-                print(
-                    f"  [{issue['type'].upper()}] {issue['rule_id']}: "
-                    f"{issue['message']}"
-                )
-        else:
-            print("Rule base is consistent. No issues found.")
-        return
-
-    # Collect case folders
-    case_folders = []
+def _collect_case_folders(args: argparse.Namespace) -> list[Path] | None:
+    """Collect case folders from CLI arguments. Returns None on error."""
     if args.case_dir:
-        case_folders = [Path(args.case_dir)]
-    elif args.batch_dir:
+        return [Path(args.case_dir)]
+    if args.batch_dir:
         batch_path = Path(args.batch_dir)
         if not batch_path.exists():
             print(f"Error: Batch directory not found: {batch_path}")
-            return
-        case_folders = sorted(
-            [d for d in batch_path.iterdir() if d.is_dir()], key=lambda x: x.name
+            return None
+        folders = sorted(
+            [d for d in batch_path.iterdir() if d.is_dir()],
+            key=lambda x: x.name,
         )
         if args.num_cases:
-            case_folders = case_folders[: args.num_cases]
-    else:
-        print("Error: Provide either --case-dir or --batch-dir")
+            folders = folders[: args.num_cases]
+        return folders
+    print("Error: Provide either --case-dir or --batch-dir")
+    return None
+
+
+def _process_case(
+    idx: int,
+    total: int,
+    case_dir: Path,
+    rule_base_path: Path,
+    engine: ALFEngine,
+    dry_run: bool,
+    stats: dict,
+) -> None:
+    """Process a single case directory and update stats."""
+    case_id = case_dir.name
+    pp_path = case_dir / "Postprocessing_Data.json"
+
+    if not pp_path.exists():
+        print(
+            f"[{idx}/{total}] {case_id}: No Postprocessing_Data.json - skipping"
+        )
         return
 
-    # Print header
-    print(f"\n{'=' * 70}")
-    print("ALF Engine - Phase 1 Evaluation")
-    print(f"{'=' * 70}")
-    print(f"Rule base:  {rule_base_path}")
-    print(f"Output dir: {ALF_OUT_DIR}")
-    print(f"Rules loaded: {len(engine.rules)}")
-    print(f"Cases to process: {len(case_folders)}")
-    print(f"Dry run: {args.dry_run}")
-    print()
+    revised, audit = run_alf_on_case(
+        rule_base_path=rule_base_path,
+        output_folder=case_dir,
+        save_to_alf_out=(not dry_run),
+        engine=engine,
+    )
 
-    # Batch statistics
-    stats = {
-        "total": len(case_folders),
-        "rules_fired": 0,
-        "no_change": 0,
-        "cases_corrected": [],
-    }
+    rules_applied = [r["rule_id"] for r in audit.get("rules_applied", [])]
 
-    for idx, case_dir in enumerate(case_folders, 1):
-        case_id = case_dir.name
-        pp_path = case_dir / "Postprocessing_Data.json"
-
-        if not pp_path.exists():
-            print(
-                f"[{idx}/{len(case_folders)}] {case_id}: "
-                f"No Postprocessing_Data.json - skipping"
-            )
-            continue
-
-        revised, audit = run_alf_on_case(
-            rule_base_path=rule_base_path,
-            output_folder=case_dir,
-            save_to_alf_out=(not args.dry_run),
-            engine=engine,
+    if rules_applied:
+        stats["rules_fired"] += len(rules_applied)
+        stats["cases_corrected"].append(
+            {"case_id": case_id, "rules": rules_applied}
         )
+        alf_case_dir = ALF_OUT_DIR / case_id
+        print(
+            f"[{idx}/{total}] {case_id}: "
+            f"CORRECTED [{', '.join(rules_applied)}]"
+            f"{'' if dry_run else f' -> {alf_case_dir}'}"
+        )
+    else:
+        stats["no_change"] += 1
+        if not dry_run:
+            _save_unchanged_case(case_id, revised, audit)
+        print(f"[{idx}/{total}] {case_id}: no rules fired (unchanged)")
 
-        rules_applied = [r["rule_id"] for r in audit.get("rules_applied", [])]
 
-        if rules_applied:
-            stats["rules_fired"] += len(rules_applied)
-            stats["cases_corrected"].append(
-                {
-                    "case_id": case_id,
-                    "rules": rules_applied,
-                }
-            )
-            alf_case_dir = ALF_OUT_DIR / case_id
-            print(
-                f"[{idx}/{len(case_folders)}] {case_id}: "
-                f"CORRECTED [{', '.join(rules_applied)}]"
-                f"{'' if args.dry_run else f' -> {alf_case_dir}'}"
-            )
-        else:
-            stats["no_change"] += 1
-            # Still save unchanged output to ALF/out/ for completeness
-            if not args.dry_run:
-                alf_case_dir = ALF_OUT_DIR / case_id
-                alf_case_dir.mkdir(parents=True, exist_ok=True)
-                with open(
-                    alf_case_dir / "Postprocessing_Data.json", "w", encoding="utf-8"
-                ) as f:
-                    json.dump(revised, f, indent=2, ensure_ascii=False)
-                with open(
-                    alf_case_dir / "alf_audit_log.json", "w", encoding="utf-8"
-                ) as f:
-                    json.dump(audit, f, indent=2, ensure_ascii=False)
+def _save_unchanged_case(case_id: str, revised: dict, audit: dict) -> None:
+    """Save unchanged case output to ALF output directory."""
+    alf_case_dir = ALF_OUT_DIR / case_id
+    alf_case_dir.mkdir(parents=True, exist_ok=True)
+    with open(
+        alf_case_dir / "Postprocessing_Data.json", "w", encoding="utf-8"
+    ) as f:
+        json.dump(revised, f, indent=2, ensure_ascii=False)
+    with open(alf_case_dir / "alf_audit_log.json", "w", encoding="utf-8") as f:
+        json.dump(audit, f, indent=2, ensure_ascii=False)
 
-            print(f"[{idx}/{len(case_folders)}] {case_id}: no rules fired (unchanged)")
 
-    # Print summary
+def _print_batch_summary(stats: dict, dry_run: bool) -> None:
+    """Print batch processing summary."""
     print(f"\n{'=' * 70}")
     print("ALF BATCH SUMMARY")
     print(f"{'=' * 70}")
@@ -2278,8 +2451,61 @@ def main():
         for cc in stats["cases_corrected"]:
             print(f"  {cc['case_id']}: {', '.join(cc['rules'])}")
 
-    if not args.dry_run:
+    if not dry_run:
         print(f"\nRevised output saved to: {ALF_OUT_DIR}")
+
+
+def main():
+    """CLI entry point for running ALF on cases."""
+    args = _parse_cli_args()
+
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    )
+
+    rule_base_path = Path(args.rule_base)
+    engine = ALFEngine(rule_base_path)
+
+    if args.validate:
+        _run_validate_mode(engine)
+        return
+
+    case_folders = _collect_case_folders(args)
+    if case_folders is None:
+        return
+
+    # Print header
+    print(f"\n{'=' * 70}")
+    print("ALF Engine - Phase 1 Evaluation")
+    print(f"{'=' * 70}")
+    print(f"Rule base:  {rule_base_path}")
+    print(f"Output dir: {ALF_OUT_DIR}")
+    print(f"Rules loaded: {len(engine.rules)}")
+    print(f"Cases to process: {len(case_folders)}")
+    print(f"Dry run: {args.dry_run}")
+    print()
+
+    stats = {
+        "total": len(case_folders),
+        "rules_fired": 0,
+        "no_change": 0,
+        "cases_corrected": [],
+    }
+
+    for idx, case_dir in enumerate(case_folders, 1):
+        _process_case(
+            idx,
+            len(case_folders),
+            case_dir,
+            rule_base_path,
+            engine,
+            args.dry_run,
+            stats,
+        )
+
+    _print_batch_summary(stats, args.dry_run)
 
     print(f"{'=' * 70}")
 

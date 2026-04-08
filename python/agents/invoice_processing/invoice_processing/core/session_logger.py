@@ -14,7 +14,6 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from .config import SESSIONS_DIR
 
@@ -24,7 +23,9 @@ class SessionEvent:
     """One event in the session timeline."""
 
     timestamp: str
-    event_type: str  # case_loaded, sme_feedback, rule_proposed, impact_assessed,
+    event_type: (
+        str  # case_loaded, sme_feedback, rule_proposed, impact_assessed,
+    )
     # sme_revision, rule_revised, rule_approved, rule_written,
     # rule_discarded, session_end
     data: dict = field(default_factory=dict)
@@ -59,7 +60,7 @@ class SessionLogger:
     """
 
     def __init__(self):
-        self._session: Optional[Session] = None
+        self._session: Session | None = None
 
     def start(self):
         """Begin a new session."""
@@ -102,7 +103,7 @@ class SessionLogger:
         rule_dict: dict,
         raw_llm_response: str = "",
         latency_ms: float = 0.0,
-        parse_errors: list[str] = None,
+        parse_errors: list[str] | None = None,
         success: bool = True,
     ):
         self._add_event(
@@ -122,7 +123,7 @@ class SessionLogger:
         target_matched: bool,
         collateral_count: int,
         safe_count: int,
-        collateral_case_ids: list[str] = None,
+        collateral_case_ids: list[str] | None = None,
     ):
         self._add_event(
             "impact_assessed",
@@ -158,7 +159,9 @@ class SessionLogger:
     def log_rule_approved(self):
         self._add_event("rule_approved", {})
 
-    def log_rule_written(self, rule_id: str, backup_path: str, total_rules: int):
+    def log_rule_written(
+        self, rule_id: str, backup_path: str, total_rules: int
+    ):
         if self._session is None:
             self.start()
         self._session.outcome = "rule_written"
@@ -192,7 +195,7 @@ class SessionLogger:
 
     # ----- Persistence -----
 
-    def save(self) -> Optional[Path]:
+    def save(self) -> Path | None:
         """
         Save the current session to disk.
 
@@ -201,11 +204,15 @@ class SessionLogger:
         if not self._session or not self._session.events:
             return None
 
-        self._session.ended_at = self._session.ended_at or datetime.now().isoformat()
+        self._session.ended_at = (
+            self._session.ended_at or datetime.now().isoformat()
+        )
 
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-        case_suffix = f"_{self._session.case_id}" if self._session.case_id else ""
+        case_suffix = (
+            f"_{self._session.case_id}" if self._session.case_id else ""
+        )
         filename = f"{self._session.session_id}{case_suffix}.json"
         filepath = SESSIONS_DIR / filename
 
@@ -228,7 +235,9 @@ class SessionLogger:
         }
 
         with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(session_dict, f, indent=2, ensure_ascii=False, default=str)
+            json.dump(
+                session_dict, f, indent=2, ensure_ascii=False, default=str
+            )
 
         return filepath
 

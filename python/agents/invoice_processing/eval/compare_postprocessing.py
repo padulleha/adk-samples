@@ -7,7 +7,7 @@ Auto-discovers case folders from the ALF output directory.
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 
 # Define paths: eval/ -> inference_agent/ -> agents/ -> project root
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -16,22 +16,25 @@ ORIGINAL_BASE = str(PROJECT_ROOT / "data" / "agent_output")
 ALF_BASE = str(PROJECT_ROOT / "data" / "alf_output")
 
 
-def discover_case_ids() -> List[str]:
+def discover_case_ids() -> list[str]:
     """Discover case IDs from ALF output and original output directories."""
     case_ids = set()
     for base in [ALF_BASE, ORIGINAL_BASE]:
         base_path = Path(base)
         if base_path.exists():
             for entry in base_path.iterdir():
-                if entry.is_dir() and (entry / "Postprocessing_Data.json").exists():
+                if (
+                    entry.is_dir()
+                    and (entry / "Postprocessing_Data.json").exists()
+                ):
                     case_ids.add(entry.name)
     return sorted(case_ids)
 
 
-def load_json(filepath: str) -> Dict[Any, Any]:
+def load_json(filepath: str) -> dict[Any, Any]:
     """Load JSON file"""
     try:
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             return json.load(f)
     except FileNotFoundError:
         return None
@@ -40,7 +43,7 @@ def load_json(filepath: str) -> Dict[Any, Any]:
         return None
 
 
-def get_nested_value(data: Dict, keys: List[str], default=None):
+def get_nested_value(data: dict, keys: list[str], default=None):
     """Get nested value from dictionary"""
     if data is None:
         return default
@@ -53,10 +56,12 @@ def get_nested_value(data: Dict, keys: List[str], default=None):
     return current
 
 
-def compare_case(case_id: str) -> Dict[str, Any]:
+def compare_case(case_id: str) -> dict[str, Any]:
     """Compare Postprocessing_Data.json for a single case"""
 
-    original_path = os.path.join(ORIGINAL_BASE, case_id, "Postprocessing_Data.json")
+    original_path = os.path.join(
+        ORIGINAL_BASE, case_id, "Postprocessing_Data.json"
+    )
     alf_path = os.path.join(ALF_BASE, case_id, "Postprocessing_Data.json")
 
     original_data = load_json(original_path)
@@ -90,7 +95,9 @@ def compare_case(case_id: str) -> Dict[str, Any]:
     original_status = get_nested_value(
         original_data, ["Invoice Processing", "Invoice Status"]
     )
-    alf_status = get_nested_value(alf_data, ["Invoice Processing", "Invoice Status"])
+    alf_status = get_nested_value(
+        alf_data, ["Invoice Processing", "Invoice Status"]
+    )
 
     if original_status != alf_status:
         result["differences"].append(
@@ -105,7 +112,9 @@ def compare_case(case_id: str) -> Dict[str, Any]:
     original_outcome = get_nested_value(
         original_data, ["Invoice Processing", "Outcome Message"]
     )
-    alf_outcome = get_nested_value(alf_data, ["Invoice Processing", "Outcome Message"])
+    alf_outcome = get_nested_value(
+        alf_data, ["Invoice Processing", "Outcome Message"]
+    )
 
     if original_outcome != alf_outcome:
         result["differences"].append(
@@ -127,14 +136,21 @@ def compare_case(case_id: str) -> Dict[str, Any]:
 
     if original_count != alf_count:
         result["differences"].append(
-            {"field": "Line Items Count", "original": original_count, "alf": alf_count}
+            {
+                "field": "Line Items Count",
+                "original": original_count,
+                "alf": alf_count,
+            }
         )
 
     # 4. Check for _alf_llm_metadata
     has_alf_metadata = check_for_alf_metadata(alf_data)
     if has_alf_metadata:
         result["differences"].append(
-            {"field": "_alf_llm_metadata present", "value": "YES - LLM was called"}
+            {
+                "field": "_alf_llm_metadata present",
+                "value": "YES - LLM was called",
+            }
         )
 
     # 5. Check for other significant differences
@@ -143,7 +159,7 @@ def compare_case(case_id: str) -> Dict[str, Any]:
     return result
 
 
-def check_for_alf_metadata(data: Dict, path: str = "") -> bool:
+def check_for_alf_metadata(data: dict, path: str = "") -> bool:
     """Recursively check for _alf_llm_metadata field"""
     if isinstance(data, dict):
         if "_alf_llm_metadata" in data:
@@ -158,7 +174,7 @@ def check_for_alf_metadata(data: Dict, path: str = "") -> bool:
     return False
 
 
-def check_other_differences(original: Dict, alf: Dict, result: Dict):
+def check_other_differences(original: dict, alf: dict, result: dict):
     """Check for other significant differences in top-level keys"""
     original_keys = set(original.keys())
     alf_keys = set(alf.keys())
@@ -178,7 +194,7 @@ def check_other_differences(original: Dict, alf: Dict, result: Dict):
         )
 
 
-def print_comparison_report(results: List[Dict]):
+def print_comparison_report(results: list[dict]):
     """Print a formatted comparison report"""
     print("=" * 100)
     print("POSTPROCESSING_DATA.JSON COMPARISON REPORT")

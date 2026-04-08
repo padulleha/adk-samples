@@ -3,11 +3,13 @@
 import sys
 from pathlib import Path
 
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "invoice_processing"))
+from invoice_processing.shared_libraries.alf_engine import ActionExecutor
 
-from shared_libraries.alf_engine import ActionExecutor
-
+_TEST_VALUE = 42
 
 # ---------------------------------------------------------------------------
 # _set_field
@@ -22,8 +24,8 @@ class TestSetField:
 
     def test_nested_field_creates_intermediates(self):
         data = {}
-        ActionExecutor._set_field(data, "a.b.c", 42)
-        assert data["a"]["b"]["c"] == 42
+        ActionExecutor._set_field(data, "a.b.c", _TEST_VALUE)
+        assert data["a"]["b"]["c"] == _TEST_VALUE
 
     def test_overwrite_existing(self):
         data = {"decision": "REJECT"}
@@ -49,7 +51,9 @@ class TestOverrideDecision:
         action = {"type": "override_decision", "value": "ACCEPT"}
         result = ActionExecutor.execute(output, action)
         assert result["decision"] == "ACCEPT"
-        assert result["Invoice Processing"]["Invoice Status"] == "Pending payment"
+        assert (
+            result["Invoice Processing"]["Invoice Status"] == "Pending payment"
+        )
 
     def test_override_reject(self):
         output = {"decision": "ACCEPT"}
@@ -74,7 +78,11 @@ class TestOverrideDecision:
 class TestSetFieldAction:
     def test_set_field(self):
         output = {"notes": ""}
-        action = {"type": "set_field", "target": "notes", "value": "Updated by ALF"}
+        action = {
+            "type": "set_field",
+            "target": "notes",
+            "value": "Updated by ALF",
+        }
         result = ActionExecutor.execute(output, action)
         assert result["notes"] == "Updated by ALF"
 
@@ -107,7 +115,11 @@ class TestAppendNote:
 
     def test_append_to_empty(self):
         output = {}
-        action = {"type": "append_note", "target": "notes", "value": "First note."}
+        action = {
+            "type": "append_note",
+            "target": "notes",
+            "value": "First note.",
+        }
         result = ActionExecutor.execute(output, action)
         assert result["notes"] == "First note."
 
@@ -120,7 +132,11 @@ class TestAppendNote:
 class TestListActions:
     def test_add_to_existing_list(self):
         output = {"tags": ["phase1", "phase2"]}
-        action = {"type": "add_to_list", "target": "tags", "value": "alf_corrected"}
+        action = {
+            "type": "add_to_list",
+            "target": "tags",
+            "value": "alf_corrected",
+        }
         result = ActionExecutor.execute(output, action)
         assert "alf_corrected" in result["tags"]
 
@@ -197,7 +213,11 @@ class TestConditionalSet:
             "type": "conditional_set",
             "target": "reason",
             "value": "overridden",
-            "condition": {"field": "decision", "operator": "equals", "value": "REJECT"},
+            "condition": {
+                "field": "decision",
+                "operator": "equals",
+                "value": "REJECT",
+            },
         }
         result = ActionExecutor.execute(output, action, context)
         assert result["reason"] == "overridden"
@@ -209,7 +229,11 @@ class TestConditionalSet:
             "type": "conditional_set",
             "target": "reason",
             "value": "overridden",
-            "condition": {"field": "decision", "operator": "equals", "value": "REJECT"},
+            "condition": {
+                "field": "decision",
+                "operator": "equals",
+                "value": "REJECT",
+            },
         }
         result = ActionExecutor.execute(output, action, context)
         assert result["reason"] == ""

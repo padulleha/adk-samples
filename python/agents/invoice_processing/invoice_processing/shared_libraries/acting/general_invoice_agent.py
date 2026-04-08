@@ -29,27 +29,35 @@ Note:
     - .env file is loaded from script directory first
 """
 
-import os
-import sys
-import json
-import time
 import argparse
+import json
+import os
 import re
-from pathlib import Path
-from typing import Optional, List, Any, Literal, Tuple
-from datetime import datetime, date
+import sys
+import time
+import traceback
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, ClassVar, Literal
 
 # Third-party imports
 try:
-    from google.cloud import aiplatform
-    from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
-    from pydantic import BaseModel, Field
     import pdfplumber
     from dotenv import load_dotenv
+    from google.cloud import aiplatform
+    from pydantic import BaseModel, Field
+    from vertexai.generative_models import (
+        GenerationConfig,
+        GenerativeModel,
+        Part,
+    )
 except ImportError:
     print("Error: Missing required package. Install with:")
-    print("pip install google-cloud-aiplatform pydantic pdfplumber python-dotenv")
+    print(
+        "pip install google-cloud-aiplatform pydantic pdfplumber python-dotenv"
+    )
     sys.exit(1)
 
 # ============================================================================
@@ -69,42 +77,63 @@ if ENV_FILE.exists():
 else:
     load_dotenv()  # Fallback to default behavior
 
-# GCP Configuration (lazy -- resolved at call time for deployment compatibility)
-PROJECT_ID = None  # Set by _ensure_gcp_initialized()
-LOCATION = os.getenv("LOCATION", "us-central1")
-GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash")
-GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
+# Magic-value constants
+_MIN_PDF_CONTENT_LENGTH = 50
+_ABN_EXPECTED_LENGTH = 11
 
-# Rate limiting
-API_CALL_DELAY_SECONDS = float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
 
-_gcp_initialized = False
+@dataclass
+class _GCPConfig:
+    """Mutable container for GCP configuration (lazy-initialized)."""
+
+    PROJECT_ID: str | None = None
+    LOCATION: str = "us-central1"
+    GEMINI_FLASH_MODEL: str = "gemini-2.5-flash"
+    GEMINI_PRO_MODEL: str = "gemini-2.5-pro"
+    API_CALL_DELAY_SECONDS: float = 1.0
+    initialized: bool = False
+
+
+_gcp_config = _GCPConfig(
+    LOCATION=os.getenv("LOCATION", "us-central1"),
+    GEMINI_FLASH_MODEL=os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash"),
+    GEMINI_PRO_MODEL=os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro"),
+    API_CALL_DELAY_SECONDS=float(os.getenv("API_CALL_DELAY_SECONDS", "1.0")),
+)
 
 
 def _ensure_gcp_initialized():
     """Lazy-initialize GCP/Vertex AI on first use (not at import time).
 
     Agent Engine sets env vars after module import, so we must defer."""
-    global PROJECT_ID, LOCATION, GEMINI_FLASH_MODEL, GEMINI_PRO_MODEL
-    global API_CALL_DELAY_SECONDS, _gcp_initialized
-    if _gcp_initialized:
+    if _gcp_config.initialized:
         return
-    PROJECT_ID = (
+    _gcp_config.PROJECT_ID = (
         os.getenv("PROJECT_ID")
         or os.getenv("GOOGLE_CLOUD_PROJECT")
         or os.getenv("GOOGLE_CLOUD_PROJECT_ID")
         or os.getenv("GCP_PROJECT")
     )
-    LOCATION = os.getenv("LOCATION") or os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
-    GEMINI_FLASH_MODEL = os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash")
-    GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
-    API_CALL_DELAY_SECONDS = float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
-    if not PROJECT_ID:
+    _gcp_config.LOCATION = os.getenv("LOCATION") or os.getenv(
+        "GOOGLE_CLOUD_REGION", "us-central1"
+    )
+    _gcp_config.GEMINI_FLASH_MODEL = os.getenv(
+        "GEMINI_FLASH_MODEL", "gemini-2.5-flash"
+    )
+    _gcp_config.GEMINI_PRO_MODEL = os.getenv(
+        "GEMINI_PRO_MODEL", "gemini-2.5-pro"
+    )
+    _gcp_config.API_CALL_DELAY_SECONDS = float(
+        os.getenv("API_CALL_DELAY_SECONDS", "1.0")
+    )
+    if not _gcp_config.PROJECT_ID:
         print("Warning: PROJECT_ID not found in environment")
         print("Set it in .env file or export PROJECT_ID=your-gcp-project-id")
     else:
-        aiplatform.init(project=PROJECT_ID, location=LOCATION)
-    _gcp_initialized = True
+        aiplatform.init(
+            project=_gcp_config.PROJECT_ID, location=_gcp_config.LOCATION
+        )
+    _gcp_config.initialized = True
 
 
 # Default configuration - can be overridden via config file
@@ -113,7 +142,12 @@ DEFAULT_CONFIG = {
     "organization_names": ["ACME Corp", "ACME Corporation", "ACME Ltd"],
     # Tax settings
     "default_tax_rate": 0.10,  # 10%
-    "tax_rates_by_currency": {"AUD": 0.10, "NZD": 0.15, "USD": 0.00, "EUR": 0.20},
+    "tax_rates_by_currency": {
+        "AUD": 0.10,
+        "NZD": 0.15,
+        "USD": 0.00,
+        "EUR": 0.20,
+    },
     # Validation settings
     "require_work_authorization": False,
     "waf_exempt_work_types": ["PREVENTATIVE", "CLEANING"],
@@ -133,16 +167,28 @@ DEFAULT_CONFIG = {
     "tax_id_format": "ABN",  # "ABN", "VAT", "EIN", "NONE"
 }
 
-# Global config - will be populated at runtime
-CONFIG = DEFAULT_CONFIG.copy()
+# Module-level mutable containers for config and metrics
+_config_store: dict[str, Any] = {"CONFIG": DEFAULT_CONFIG.copy()}
 
-# Global metrics tracking
-METRICS = {
-    "llm_calls": 0,
-    "total_tokens": {"prompt": 0, "completion": 0},
-    "total_cost_usd": 0.0,
-    "agent_breakdown": [],
+_metrics_store: dict[str, Any] = {
+    "METRICS": {
+        "llm_calls": 0,
+        "total_tokens": {"prompt": 0, "completion": 0},
+        "total_cost_usd": 0.0,
+        "agent_breakdown": [],
+    }
 }
+
+
+def _get_config() -> dict:
+    """Return the current CONFIG dict."""
+    return _config_store["CONFIG"]
+
+
+def _get_metrics() -> dict:
+    """Return the current METRICS dict."""
+    return _metrics_store["METRICS"]
+
 
 # Pricing per 1M tokens
 MODEL_PRICING = {
@@ -169,45 +215,45 @@ class InvoiceLineItem(BaseModel):
     """Single line item from invoice"""
 
     description: str
-    quantity: Optional[float] = None
-    unit_price: Optional[float] = None
-    amount_ex_tax: Optional[float] = None
-    tax_code: Optional[str] = "TAX"
-    tax_amount: Optional[float] = None
-    amount_inc_tax: Optional[float] = None
+    quantity: float | None = None
+    unit_price: float | None = None
+    amount_ex_tax: float | None = None
+    tax_code: str | None = "TAX"
+    tax_amount: float | None = None
+    amount_inc_tax: float | None = None
 
 
 class InvoiceExtraction(BaseModel):
     """Extracted invoice data"""
 
-    invoice_number: Optional[str] = "UNKNOWN"
-    invoice_date: Optional[str] = ""
-    invoice_total_inc_tax: Optional[float] = 0.0
-    invoice_total_ex_tax: Optional[float] = 0.0
-    tax_amount: Optional[float] = 0.0
-    vendor_tax_id: Optional[str] = None
-    vendor_name: Optional[str] = "UNKNOWN"
-    customer_name: Optional[str] = None
-    currency: Optional[str] = "AUD"
-    line_items: Optional[List[InvoiceLineItem]] = []
+    invoice_number: str | None = "UNKNOWN"
+    invoice_date: str | None = ""
+    invoice_total_inc_tax: float | None = 0.0
+    invoice_total_ex_tax: float | None = 0.0
+    tax_amount: float | None = 0.0
+    vendor_tax_id: str | None = None
+    vendor_name: str | None = "UNKNOWN"
+    customer_name: str | None = None
+    currency: str | None = "AUD"
+    line_items: list[InvoiceLineItem] | None = []
 
 
 class WorkAuthorizationExtraction(BaseModel):
     """Extracted work authorization data"""
 
-    reference_number: Optional[str] = None
-    site_name: Optional[str] = None
-    authorized_hours: Optional[float] = None
-    work_description: Optional[str] = None
-    technician_name: Optional[str] = None
-    date: Optional[str] = None
+    reference_number: str | None = None
+    site_name: str | None = None
+    authorized_hours: float | None = None
+    work_description: str | None = None
+    technician_name: str | None = None
+    date: str | None = None
 
 
 class WorkTypeClassification(BaseModel):
     """LLM response for work type classification"""
 
-    work_type: Literal["REPAIRS", "PREVENTATIVE", "CLEANING", "EMERGENCY"] = Field(
-        description="The work type category"
+    work_type: Literal["REPAIRS", "PREVENTATIVE", "CLEANING", "EMERGENCY"] = (
+        Field(description="The work type category")
     )
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
@@ -234,13 +280,11 @@ class VendorNameSimilarity(BaseModel):
 # ============================================================================
 
 
-def load_config(config_path: Optional[str] = None) -> dict:
+def load_config(config_path: str | None = None) -> dict:
     """Load configuration from file or use defaults.
 
     Config path is resolved relative to SCRIPT_DIR if not absolute.
     """
-    global CONFIG
-
     if config_path:
         config_file = Path(config_path)
         # Resolve relative paths relative to script directory
@@ -248,17 +292,17 @@ def load_config(config_path: Optional[str] = None) -> dict:
             config_file = SCRIPT_DIR / config_file
 
         if config_file.exists():
-            with open(config_file, "r") as f:
+            with open(config_file) as f:
                 user_config = json.load(f)
-                CONFIG = {**DEFAULT_CONFIG, **user_config}
+                _config_store["CONFIG"] = {**DEFAULT_CONFIG, **user_config}
                 print(f"Loaded config from {config_file}")
         else:
             print(f"Warning: Config file not found: {config_file}")
-            CONFIG = DEFAULT_CONFIG.copy()
+            _config_store["CONFIG"] = DEFAULT_CONFIG.copy()
     else:
-        CONFIG = DEFAULT_CONFIG.copy()
+        _config_store["CONFIG"] = DEFAULT_CONFIG.copy()
 
-    return CONFIG
+    return _config_store["CONFIG"]
 
 
 def get_output_folder(case_id: str) -> Path:
@@ -288,7 +332,7 @@ def extract_pdf_to_markdown(pdf_path: Path) -> str:
 def extract_pdf_with_gemini(pdf_path: Path) -> str:
     """Extract text from PDF using Gemini multimodal"""
     model = GenerativeModel(
-        GEMINI_FLASH_MODEL,
+        _gcp_config.GEMINI_FLASH_MODEL,
         generation_config=GenerationConfig(temperature=0),
     )
 
@@ -303,19 +347,19 @@ Do not summarize - extract complete text content."""
 
     response = model.generate_content([pdf_part, prompt])
 
-    if API_CALL_DELAY_SECONDS > 0:
-        time.sleep(API_CALL_DELAY_SECONDS)
+    if _gcp_config.API_CALL_DELAY_SECONDS > 0:
+        time.sleep(_gcp_config.API_CALL_DELAY_SECONDS)
 
     return response.text
 
 
-def extract_pdf_with_fallback(pdf_path: Path) -> Tuple[str, str]:
+def extract_pdf_with_fallback(pdf_path: Path) -> tuple[str, str]:
     """Extract PDF with Gemini as default, pdfplumber as fallback"""
     _ensure_gcp_initialized()
-    if PROJECT_ID:
+    if _gcp_config.PROJECT_ID:
         try:
             content = extract_pdf_with_gemini(pdf_path)
-            if content and len(content.strip()) > 50:
+            if content and len(content.strip()) > _MIN_PDF_CONTENT_LENGTH:
                 return content, "gemini"
         except Exception as e:
             print(f"    Gemini extraction failed: {e}, using pdfplumber...")
@@ -324,27 +368,28 @@ def extract_pdf_with_fallback(pdf_path: Path) -> Tuple[str, str]:
     return content, "pdfplumber"
 
 
-def clean_json_response(response_text: str) -> str:
-    """Clean LLM JSON response - remove markdown, fix trailing commas"""
-    text = response_text.strip()
+def _strip_markdown_code_block(text: str) -> str:
+    """Strip markdown code-block fences from text, returning the inner content."""
+    if not text.startswith("```"):
+        return text
+    lines = text.split("\n")
+    json_lines: list[str] = []
+    in_block = False
+    for line in lines:
+        if line.strip().startswith("```"):
+            if in_block:
+                break
+            in_block = True
+            continue
+        elif in_block:
+            json_lines.append(line)
+    if json_lines:
+        return "\n".join(json_lines).strip()
+    return text
 
-    # Remove markdown code blocks
-    if text.startswith("```"):
-        lines = text.split("\n")
-        json_lines = []
-        in_block = False
-        for line in lines:
-            if line.strip().startswith("```"):
-                if in_block:
-                    break
-                in_block = True
-                continue
-            elif in_block:
-                json_lines.append(line)
-        if json_lines:
-            text = "\n".join(json_lines).strip()
 
-    # Find JSON object
+def _extract_json_object(text: str) -> str:
+    """Find and return the first top-level JSON object in *text*."""
     start_idx = text.find("{")
     if start_idx == -1:
         raise ValueError("No JSON object found")
@@ -363,11 +408,15 @@ def clean_json_response(response_text: str) -> str:
     if end_idx == -1:
         raise ValueError("Unclosed JSON object")
 
-    json_str = text[start_idx:end_idx]
+    return text[start_idx:end_idx]
 
+
+def clean_json_response(response_text: str) -> str:
+    """Clean LLM JSON response - remove markdown, fix trailing commas"""
+    text = _strip_markdown_code_block(response_text.strip())
+    json_str = _extract_json_object(text)
     # Remove trailing commas
     json_str = re.sub(r",(\s*[}\]])", r"\1", json_str)
-
     return json_str
 
 
@@ -376,12 +425,15 @@ def normalize_tax_id(tax_id: str) -> str:
     return re.sub(r"[^0-9]", "", tax_id or "")
 
 
-def validate_abn_checksum(abn: str) -> Tuple[bool, str]:
+def validate_abn_checksum(abn: str) -> tuple[bool, str]:
     """Validate Australian Business Number checksum"""
     abn_clean = normalize_tax_id(abn)
 
-    if len(abn_clean) != 11:
-        return False, f"Invalid length: {len(abn_clean)} (must be 11)"
+    if len(abn_clean) != _ABN_EXPECTED_LENGTH:
+        return (
+            False,
+            f"Invalid length: {len(abn_clean)} (must be {_ABN_EXPECTED_LENGTH})",
+        )
 
     if not abn_clean.isdigit():
         return False, "Contains non-numeric characters"
@@ -397,7 +449,7 @@ def validate_abn_checksum(abn: str) -> Tuple[bool, str]:
     return False, f"Invalid checksum (mod 89 = {checksum % 89})"
 
 
-def validate_tax_id(tax_id: str, format_type: str = "ABN") -> Tuple[bool, str]:
+def validate_tax_id(tax_id: str, format_type: str = "ABN") -> tuple[bool, str]:
     """Validate tax ID based on format type"""
     if format_type == "NONE":
         return True, "Validation disabled"
@@ -410,10 +462,13 @@ def validate_tax_id(tax_id: str, format_type: str = "ABN") -> Tuple[bool, str]:
 
 
 def call_gemini(
-    prompt: str, model_name: str = None, response_schema: type[BaseModel] = None
-) -> Tuple[Any, float]:
+    prompt: str,
+    model_name: str | None = None,
+    response_schema: type[BaseModel] | None = None,
+) -> tuple[Any, float]:
     """Call Gemini API with optional structured output"""
-    model_name = model_name or GEMINI_FLASH_MODEL
+    metrics = _get_metrics()
+    model_name = model_name or _gcp_config.GEMINI_FLASH_MODEL
     model = GenerativeModel(
         model_name,
         generation_config=GenerationConfig(temperature=0),
@@ -425,19 +480,19 @@ def call_gemini(
 
     # Update metrics
     usage = response.usage_metadata
-    METRICS["llm_calls"] += 1
-    METRICS["total_tokens"]["prompt"] += usage.prompt_token_count
-    METRICS["total_tokens"]["completion"] += usage.candidates_token_count
+    metrics["llm_calls"] += 1
+    metrics["total_tokens"]["prompt"] += usage.prompt_token_count
+    metrics["total_tokens"]["completion"] += usage.candidates_token_count
 
     pricing = MODEL_PRICING.get(
         model_name.split("/")[-1], MODEL_PRICING["gemini-2.5-flash"]
     )
     cost = (usage.prompt_token_count / 1_000_000) * pricing["input"]
     cost += (usage.candidates_token_count / 1_000_000) * pricing["output"]
-    METRICS["total_cost_usd"] += cost
+    metrics["total_cost_usd"] += cost
 
-    if API_CALL_DELAY_SECONDS > 0:
-        time.sleep(API_CALL_DELAY_SECONDS)
+    if _gcp_config.API_CALL_DELAY_SECONDS > 0:
+        time.sleep(_gcp_config.API_CALL_DELAY_SECONDS)
 
     if response_schema:
         json_str = clean_json_response(response.text)
@@ -449,11 +504,12 @@ def call_gemini(
 def call_gemini_with_pdf(
     pdf_path: Path,
     prompt: str,
-    model_name: str = None,
-    response_schema: type[BaseModel] = None,
-) -> Tuple[Any, float]:
+    model_name: str | None = None,
+    response_schema: type[BaseModel] | None = None,
+) -> tuple[Any, float]:
     """Call Gemini with PDF as input"""
-    model_name = model_name or GEMINI_PRO_MODEL
+    metrics = _get_metrics()
+    model_name = model_name or _gcp_config.GEMINI_PRO_MODEL
     model = GenerativeModel(
         model_name,
         generation_config=GenerationConfig(temperature=0),
@@ -470,19 +526,19 @@ def call_gemini_with_pdf(
 
     # Update metrics
     usage = response.usage_metadata
-    METRICS["llm_calls"] += 1
-    METRICS["total_tokens"]["prompt"] += usage.prompt_token_count
-    METRICS["total_tokens"]["completion"] += usage.candidates_token_count
+    metrics["llm_calls"] += 1
+    metrics["total_tokens"]["prompt"] += usage.prompt_token_count
+    metrics["total_tokens"]["completion"] += usage.candidates_token_count
 
     pricing = MODEL_PRICING.get(
         model_name.split("/")[-1], MODEL_PRICING["gemini-2.5-flash"]
     )
     cost = (usage.prompt_token_count / 1_000_000) * pricing["input"]
     cost += (usage.candidates_token_count / 1_000_000) * pricing["output"]
-    METRICS["total_cost_usd"] += cost
+    metrics["total_cost_usd"] += cost
 
-    if API_CALL_DELAY_SECONDS > 0:
-        time.sleep(API_CALL_DELAY_SECONDS)
+    if _gcp_config.API_CALL_DELAY_SECONDS > 0:
+        time.sleep(_gcp_config.API_CALL_DELAY_SECONDS)
 
     if response_schema:
         json_str = clean_json_response(response.text)
@@ -491,7 +547,7 @@ def call_gemini_with_pdf(
     return response.text, latency_ms
 
 
-def parse_date(date_str: Optional[str]) -> Optional[date]:
+def parse_date(date_str: str | None) -> date | None:
     """Parse date string in various formats"""
     if not date_str:
         return None
@@ -503,7 +559,9 @@ def parse_date(date_str: Optional[str]) -> Optional[date]:
     return None
 
 
-def check_vendor_name_similarity(name1: str, name2: str) -> Tuple[bool, str, float]:
+def check_vendor_name_similarity(
+    name1: str, name2: str
+) -> tuple[bool, str, float]:
     """Use LLM to check if vendor names are semantically equivalent"""
     prompt = f"""Determine if these two vendor names refer to the SAME business entity.
 
@@ -520,7 +578,9 @@ Return ONLY this JSON:
 {{"are_similar": true/false, "confidence": 0.0-1.0, "reasoning": "brief explanation"}}"""
 
     try:
-        result, _ = call_gemini(prompt, GEMINI_FLASH_MODEL, VendorNameSimilarity)
+        result, _ = call_gemini(
+            prompt, _gcp_config.GEMINI_FLASH_MODEL, VendorNameSimilarity
+        )
         return result.are_similar, result.reasoning, result.confidence
     except Exception as e:
         return False, f"LLM check failed: {e}", 0.0
@@ -538,7 +598,9 @@ class BaseAgent(ABC):
         self.name = name
         self.version = version
 
-    def create_output(self, data: dict, input_refs: List[str] = None) -> dict:
+    def create_output(
+        self, data: dict, input_refs: list[str] | None = None
+    ) -> dict:
         """Wrap agent output with metadata"""
         return {
             "agent": self.name,
@@ -548,7 +610,9 @@ class BaseAgent(ABC):
             **data,
         }
 
-    def save_artifact(self, output_folder: Path, filename: str, data: dict) -> Path:
+    def save_artifact(
+        self, output_folder: Path, filename: str, data: dict
+    ) -> Path:
         """Save artifact to output folder"""
         output_file = output_folder / filename
         with open(output_file, "w", encoding="utf-8") as f:
@@ -667,14 +731,17 @@ Return ONLY this JSON:
 }}"""
 
         try:
-            result, _ = call_gemini(prompt, GEMINI_FLASH_MODEL, DocumentContent)
+            result, _ = call_gemini(
+                prompt, _gcp_config.GEMINI_FLASH_MODEL, DocumentContent
+            )
             return result
         except Exception as e:
             print(f"    Warning: Document analysis failed: {e}")
             # Fallback to keyword detection
             content_lower = content.lower()
             return DocumentContent(
-                has_invoice="invoice" in content_lower and "total" in content_lower,
+                has_invoice="invoice" in content_lower
+                and "total" in content_lower,
                 has_work_authorization="work authorization" in content_lower
                 or "waf" in content_lower,
                 invoice_count=1 if "invoice" in content_lower else 0,
@@ -713,12 +780,12 @@ class ExtractorAgent(BaseAgent):
                 invoice_data = self._extract_invoice(Path(source["full_path"]))
 
                 # Validate tax ID if configured
-                if CONFIG.get("validate_tax_id_checksum") and invoice_data.get(
-                    "vendor_tax_id"
-                ):
+                if _get_config().get(
+                    "validate_tax_id_checksum"
+                ) and invoice_data.get("vendor_tax_id"):
                     tax_valid, tax_reason = validate_tax_id(
                         invoice_data["vendor_tax_id"],
-                        CONFIG.get("tax_id_format", "ABN"),
+                        _get_config().get("tax_id_format", "ABN"),
                     )
                     invoice_data["_tax_id_validation"] = {
                         "valid": tax_valid,
@@ -742,7 +809,9 @@ class ExtractorAgent(BaseAgent):
         if waf_sources:
             try:
                 waf_data = self._extract_waf(Path(waf_sources[0]["full_path"]))
-                print(f"   Extracted WAF: {waf_data.get('authorized_hours', 0)} hours")
+                print(
+                    f"   Extracted WAF: {waf_data.get('authorized_hours', 0)} hours"
+                )
             except Exception as e:
                 print(f"   WAF extraction failed: {e}")
 
@@ -755,7 +824,9 @@ class ExtractorAgent(BaseAgent):
                 "invoice_count": classification.get("summary", {}).get(
                     "invoice_count", 0
                 ),
-                "waf_count": classification.get("summary", {}).get("waf_count", 0),
+                "waf_count": classification.get("summary", {}).get(
+                    "waf_count", 0
+                ),
             },
             input_refs=["01_classification.json"],
         )
@@ -793,7 +864,7 @@ Return ONLY valid JSON with these fields:
 Extract ALL line items. Use null for missing optional fields."""
 
         result, _ = call_gemini_with_pdf(
-            pdf_path, prompt, GEMINI_PRO_MODEL, InvoiceExtraction
+            pdf_path, prompt, _gcp_config.GEMINI_PRO_MODEL, InvoiceExtraction
         )
         return result.model_dump()
 
@@ -812,7 +883,10 @@ Return ONLY valid JSON:
 }"""
 
         result, _ = call_gemini_with_pdf(
-            pdf_path, prompt, GEMINI_PRO_MODEL, WorkAuthorizationExtraction
+            pdf_path,
+            prompt,
+            _gcp_config.GEMINI_PRO_MODEL,
+            WorkAuthorizationExtraction,
         )
         return result.model_dump()
 
@@ -856,7 +930,9 @@ class Phase1ValidatorAgent(BaseAgent):
                     "step": "1.1",
                     "rule": "Invoice extraction must succeed",
                     "passed": False,
-                    "evidence": extraction.get("extraction_error", "Extraction failed"),
+                    "evidence": extraction.get(
+                        "extraction_error", "Extraction failed"
+                    ),
                     "rejection_template": "Document is not a valid Tax Invoice",
                 }
             )
@@ -872,9 +948,13 @@ class Phase1ValidatorAgent(BaseAgent):
 
         # Step 1.2: Customer Verification
         customer_name = (invoice.get("customer_name") or "").lower()
-        org_names = [n.lower() for n in CONFIG.get("organization_names", [])]
+        org_names = [
+            n.lower() for n in _get_config().get("organization_names", [])
+        ]
         customer_match = (
-            any(org in customer_name for org in org_names) if org_names else True
+            any(org in customer_name for org in org_names)
+            if org_names
+            else True
         )
 
         validations.append(
@@ -893,7 +973,8 @@ class Phase1ValidatorAgent(BaseAgent):
         has_tax_id = bool(invoice.get("vendor_tax_id"))
         has_date = bool(invoice.get("invoice_date"))
         has_vendor = bool(
-            invoice.get("vendor_name") and invoice.get("vendor_name") != "UNKNOWN"
+            invoice.get("vendor_name")
+            and invoice.get("vendor_name") != "UNKNOWN"
         )
         tax_compliant = has_tax_id and has_date and has_vendor
 
@@ -910,9 +991,9 @@ class Phase1ValidatorAgent(BaseAgent):
         )
 
         # Step 1.4: Work Authorization Check
-        if CONFIG.get("require_work_authorization"):
+        if _get_config().get("require_work_authorization"):
             work_type = self._determine_work_type(invoice)
-            exempt_types = CONFIG.get("waf_exempt_work_types", [])
+            exempt_types = _get_config().get("waf_exempt_work_types", [])
             waf_required = work_type not in exempt_types
             has_waf = extraction.get("waf_count", 0) > 0
 
@@ -955,7 +1036,9 @@ class Phase1ValidatorAgent(BaseAgent):
                 "rejection_template": failed[0].get("rejection_template")
                 if failed
                 else None,
-                "rejection_reason": failed[0].get("evidence") if failed else None,
+                "rejection_reason": failed[0].get("evidence")
+                if failed
+                else None,
             },
             input_refs=["02_extraction.json"],
         )
@@ -978,9 +1061,13 @@ class Phase1ValidatorAgent(BaseAgent):
             for kw in ["preventative", "pm", "scheduled", "maintenance"]
         ):
             return "PREVENTATIVE"
-        if any(kw in descriptions for kw in ["cleaning", "clean", "janitorial"]):
+        if any(
+            kw in descriptions for kw in ["cleaning", "clean", "janitorial"]
+        ):
             return "CLEANING"
-        if any(kw in descriptions for kw in ["emergency", "urgent", "after hours"]):
+        if any(
+            kw in descriptions for kw in ["emergency", "urgent", "after hours"]
+        ):
             return "EMERGENCY"
         return "REPAIRS"
 
@@ -1018,7 +1105,7 @@ class Phase2ValidatorAgent(BaseAgent):
 
         # Step 2.2: PO Validation (if required)
         # Note: This would need PO data from preprocessing - simplified here
-        if CONFIG.get("require_purchase_order"):
+        if _get_config().get("require_purchase_order"):
             validations.append(
                 {
                     "step": "2.2",
@@ -1067,7 +1154,7 @@ class Phase3ValidatorAgent(BaseAgent):
         validations = []
 
         # Step 3.1: Duplicate Detection
-        if CONFIG.get("duplicate_check_enabled"):
+        if _get_config().get("duplicate_check_enabled"):
             # Placeholder - would integrate with actual duplicate check
             validations.append(
                 {
@@ -1157,7 +1244,7 @@ class Phase4ValidatorAgent(BaseAgent):
 
         expected_total = total_ex + tax
         balance = abs(total_inc - expected_total)
-        tolerance = CONFIG.get("balance_tolerance", 0.02)
+        tolerance = _get_config().get("balance_tolerance", 0.02)
 
         validations.append(
             {
@@ -1170,10 +1257,11 @@ class Phase4ValidatorAgent(BaseAgent):
 
         # Step 4.2: Line Sum Validation
         line_total = sum(
-            (item.get("amount_ex_tax") or 0) for item in (invoice.get("line_items") or [])
+            (item.get("amount_ex_tax") or 0)
+            for item in (invoice.get("line_items") or [])
         )
         line_diff = abs(line_total - total_ex)
-        line_tolerance = CONFIG.get("line_sum_tolerance", 1.00)
+        line_tolerance = _get_config().get("line_sum_tolerance", 1.00)
 
         validations.append(
             {
@@ -1190,12 +1278,14 @@ class Phase4ValidatorAgent(BaseAgent):
         # Step 4.3: WAF Hours Check
         # Determine work type to check WAF exemption
         work_type = self._determine_work_type(invoice)
-        exempt_types = [t.upper() for t in CONFIG.get("waf_exempt_work_types", [])]
+        exempt_types = [
+            t.upper() for t in _get_config().get("waf_exempt_work_types", [])
+        ]
         waf_required = work_type not in exempt_types
 
         invoice_hours = self._calculate_labour_hours(invoice)
         waf_hours = waf.get("authorized_hours", 0) if waf else 0
-        hours_tolerance = CONFIG.get("hours_tolerance", 0.5)
+        hours_tolerance = _get_config().get("hours_tolerance", 0.5)
 
         if waf and waf_hours and waf_hours > 0:
             # WAF present with authorized hours — check limits
@@ -1260,9 +1350,13 @@ class Phase4ValidatorAgent(BaseAgent):
             for kw in ["preventative", "pm", "scheduled", "maintenance"]
         ):
             return "PREVENTATIVE"
-        if any(kw in descriptions for kw in ["cleaning", "clean", "janitorial"]):
+        if any(
+            kw in descriptions for kw in ["cleaning", "clean", "janitorial"]
+        ):
             return "CLEANING"
-        if any(kw in descriptions for kw in ["emergency", "urgent", "after hours"]):
+        if any(
+            kw in descriptions for kw in ["emergency", "urgent", "after hours"]
+        ):
             return "EMERGENCY"
         return "REPAIRS"
 
@@ -1288,7 +1382,7 @@ class Phase4ValidatorAgent(BaseAgent):
 class TransformerAgent(BaseAgent):
     """Line Item Transformation Agent"""
 
-    VALID_ITEM_CODES = [
+    VALID_ITEM_CODES: ClassVar[list[str]] = [
         "LABOUR",
         "LABOUR_AH",
         "PARTS",
@@ -1302,7 +1396,7 @@ class TransformerAgent(BaseAgent):
 
     # Tax code normalization map — extracted values are mapped to
     # the canonical codes expected by downstream systems and eval.
-    TAX_CODE_MAP = {
+    TAX_CODE_MAP: ClassVar[dict[str, str]] = {
         "GST": "TAX",
         "gst": "TAX",
         "Gst": "TAX",
@@ -1318,7 +1412,9 @@ class TransformerAgent(BaseAgent):
 
         invoice = extraction.get("invoice", {})
         currency = invoice.get("currency", "AUD")
-        tax_rate = CONFIG.get("tax_rates_by_currency", {}).get(currency, 0.10)
+        tax_rate = (
+            _get_config().get("tax_rates_by_currency", {}).get(currency, 0.10)
+        )
 
         line_items = invoice.get("line_items") or []
 
@@ -1372,7 +1468,7 @@ class TransformerAgent(BaseAgent):
         print(f"   Mapped {len(mapped_items)} line items")
         return output
 
-    def _classify_items_llm(self, descriptions: List[str]) -> List[str]:
+    def _classify_items_llm(self, descriptions: list[str]) -> list[str]:
         """Classify all line item descriptions using a single LLM call.
 
         Uses Gemini to semantically classify each line item description into
@@ -1413,17 +1509,21 @@ Return ONLY a JSON object in this exact format:
 {{"classifications": [{{"item_number": 1, "item_code": "CODE", "reasoning": "brief reason"}}, ...]}}"""
 
         try:
-            result, _ = call_gemini(prompt, GEMINI_FLASH_MODEL)
+            result, _ = call_gemini(prompt, _gcp_config.GEMINI_FLASH_MODEL)
             json_str = clean_json_response(result)
             parsed = json.loads(json_str)
             classifications = parsed.get("classifications", [])
 
             # Build result list, validating each code
             codes = []
-            for i, desc in enumerate(descriptions):
+            for i, _desc in enumerate(descriptions):
                 item_num = i + 1
                 match = next(
-                    (c for c in classifications if c.get("item_number") == item_num),
+                    (
+                        c
+                        for c in classifications
+                        if c.get("item_number") == item_num
+                    ),
                     None,
                 )
                 if match and match.get("item_code") in self.VALID_ITEM_CODES:
@@ -1433,10 +1533,14 @@ Return ONLY a JSON object in this exact format:
             return codes
 
         except Exception as e:
-            print(f"    Warning: LLM item classification failed ({e}), using fallback")
+            print(
+                f"    Warning: LLM item classification failed ({e}), using fallback"
+            )
             return self._classify_items_keyword_fallback(descriptions)
 
-    def _classify_items_keyword_fallback(self, descriptions: List[str]) -> List[str]:
+    def _classify_items_keyword_fallback(
+        self, descriptions: list[str]
+    ) -> list[str]:
         """Keyword-based fallback for item classification when LLM is unavailable."""
         KEYWORD_MAP = {
             "LABOUR_AH": ["after hours", "overtime", "a/h", "after-hours"],
@@ -1500,9 +1604,9 @@ class OutputGeneratorAgent(BaseAgent):
         extraction: dict,
         transformer: dict,
         decision: str,
-        rejection_template: str = None,
-        rejection_reason: str = None,
-        rejection_phase: int = None,
+        rejection_template: str | None = None,
+        rejection_reason: str | None = None,
+        rejection_phase: int | None = None,
     ) -> dict:
         print(" [8/9] Output Generator: Starting...")
 
@@ -1522,7 +1626,9 @@ class OutputGeneratorAgent(BaseAgent):
         if decision == "ACCEPT":
             outcome = f"Invoice accepted for payment on {timestamp}"
         elif decision == "REJECT":
-            reason = rejection_template or rejection_reason or "Validation failed"
+            reason = (
+                rejection_template or rejection_reason or "Validation failed"
+            )
             outcome = f"Invoice rejected on {timestamp}: {reason}"
         else:
             outcome = f"Invoice requires review as of {timestamp}"
@@ -1555,7 +1661,9 @@ class OutputGeneratorAgent(BaseAgent):
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-        print(f"  => Saved: Postprocessing_Data.json (Status: {invoice_status})")
+        print(
+            f"  => Saved: Postprocessing_Data.json (Status: {invoice_status})"
+        )
 
         # Save decision artifact
         decision_output = self.create_output(
@@ -1603,10 +1711,12 @@ class AuditLoggerAgent(BaseAgent):
                 "processing_summary": {
                     "decision": decision,
                     "processing_time_seconds": round(processing_time, 2),
-                    "total_llm_calls": METRICS["llm_calls"],
-                    "total_tokens": METRICS["total_tokens"]["prompt"]
-                    + METRICS["total_tokens"]["completion"],
-                    "total_cost_usd": round(METRICS["total_cost_usd"], 6),
+                    "total_llm_calls": _get_metrics()["llm_calls"],
+                    "total_tokens": _get_metrics()["total_tokens"]["prompt"]
+                    + _get_metrics()["total_tokens"]["completion"],
+                    "total_cost_usd": round(
+                        _get_metrics()["total_cost_usd"], 6
+                    ),
                 },
                 "artifacts": [
                     "01_classification.json",
@@ -1632,6 +1742,128 @@ class AuditLoggerAgent(BaseAgent):
 # ============================================================================
 
 
+def _handle_phase_rejection(
+    output_folder: Path,
+    source_folder: Path,
+    extraction: dict,
+    phase_result: dict,
+    phase_num: int,
+    start_time: float,
+) -> dict:
+    """Handle rejection at a specific validation phase."""
+    transformer = TransformerAgent()
+    transformer_result = transformer.run(
+        output_folder, extraction, phase_result
+    )
+
+    output_gen = OutputGeneratorAgent()
+    output_gen.run(
+        output_folder,
+        extraction,
+        transformer_result,
+        "REJECT",
+        phase_result.get("rejection_template"),
+        phase_result.get("rejection_reason"),
+        rejection_phase=phase_num,
+    )
+
+    audit = AuditLoggerAgent()
+    audit.run(output_folder, source_folder, "REJECT", time.time() - start_time)
+    return {"decision": "REJECT", "phase": phase_num}
+
+
+def _run_pipeline(
+    source_folder: Path,
+    output_folder: Path,
+    start_time: float,
+) -> dict:
+    """Run the main processing pipeline (agents 1-9). Returns result dict."""
+    # Agent 1: Classification
+    classifier = ClassifierAgent()
+    classification = classifier.run(source_folder, output_folder)
+
+    # Agent 2: Extraction
+    extractor = ExtractorAgent()
+    extraction = extractor.run(source_folder, output_folder, classification)
+
+    # Agent 3: Phase 1 Validation
+    phase1 = Phase1ValidatorAgent()
+    phase1_result = phase1.run(output_folder, extraction)
+
+    if phase1_result["decision"] == "REJECT":
+        return _handle_phase_rejection(
+            output_folder,
+            source_folder,
+            extraction,
+            phase1_result,
+            1,
+            start_time,
+        )
+
+    # Agent 4: Phase 2 Validation
+    phase2 = Phase2ValidatorAgent()
+    phase2_result = phase2.run(output_folder, extraction, phase1_result)
+
+    if phase2_result["decision"] == "REJECT":
+        return _handle_phase_rejection(
+            output_folder,
+            source_folder,
+            extraction,
+            phase2_result,
+            2,
+            start_time,
+        )
+
+    # Agent 5: Phase 3 Validation
+    phase3 = Phase3ValidatorAgent()
+    phase3_result = phase3.run(output_folder, extraction, phase2_result)
+
+    if phase3_result["decision"] == "REJECT":
+        return _handle_phase_rejection(
+            output_folder,
+            source_folder,
+            extraction,
+            phase3_result,
+            3,
+            start_time,
+        )
+
+    # Agent 6: Phase 4 Validation
+    phase4 = Phase4ValidatorAgent()
+    phase4_result = phase4.run(output_folder, extraction, phase3_result)
+
+    # Agent 7: Transformer
+    transformer = TransformerAgent()
+    transformer_result = transformer.run(
+        output_folder, extraction, phase4_result
+    )
+
+    # Agent 8: Output Generator
+    output_gen = OutputGeneratorAgent()
+    output_gen.run(
+        output_folder,
+        extraction,
+        transformer_result,
+        phase4_result["decision"],
+        phase4_result.get("rejection_template"),
+        phase4_result.get("rejection_reason"),
+        rejection_phase=4 if phase4_result["decision"] == "REJECT" else None,
+    )
+
+    # Agent 9: Audit Logger
+    processing_time = time.time() - start_time
+    audit = AuditLoggerAgent()
+    audit.run(
+        output_folder, source_folder, phase4_result["decision"], processing_time
+    )
+
+    return {
+        "decision": phase4_result["decision"],
+        "processing_time": processing_time,
+        "output_folder": str(output_folder),
+    }
+
+
 def process_invoice(source_folder: Path) -> dict:
     """Main pipeline orchestrator"""
     _ensure_gcp_initialized()
@@ -1645,8 +1877,7 @@ def process_invoice(source_folder: Path) -> dict:
     print(f"{'=' * 60}")
 
     # Reset metrics
-    global METRICS
-    METRICS = {
+    _metrics_store["METRICS"] = {
         "llm_calls": 0,
         "total_tokens": {"prompt": 0, "completion": 0},
         "total_cost_usd": 0.0,
@@ -1654,124 +1885,10 @@ def process_invoice(source_folder: Path) -> dict:
     }
 
     try:
-        # Agent 1: Classification
-        classifier = ClassifierAgent()
-        classification = classifier.run(source_folder, output_folder)
-
-        # Agent 2: Extraction
-        extractor = ExtractorAgent()
-        extraction = extractor.run(source_folder, output_folder, classification)
-
-        # Agent 3: Phase 1 Validation
-        phase1 = Phase1ValidatorAgent()
-        phase1_result = phase1.run(output_folder, extraction)
-
-        if phase1_result["decision"] == "REJECT":
-            transformer = TransformerAgent()
-            transformer_result = transformer.run(
-                output_folder, extraction, phase1_result
-            )
-
-            output_gen = OutputGeneratorAgent()
-            output_gen.run(
-                output_folder,
-                extraction,
-                transformer_result,
-                "REJECT",
-                phase1_result.get("rejection_template"),
-                phase1_result.get("rejection_reason"),
-                rejection_phase=1,
-            )
-
-            audit = AuditLoggerAgent()
-            audit.run(output_folder, source_folder, "REJECT", time.time() - start_time)
-            return {"decision": "REJECT", "phase": 1}
-
-        # Agent 4: Phase 2 Validation
-        phase2 = Phase2ValidatorAgent()
-        phase2_result = phase2.run(output_folder, extraction, phase1_result)
-
-        if phase2_result["decision"] == "REJECT":
-            transformer = TransformerAgent()
-            transformer_result = transformer.run(
-                output_folder, extraction, phase2_result
-            )
-
-            output_gen = OutputGeneratorAgent()
-            output_gen.run(
-                output_folder,
-                extraction,
-                transformer_result,
-                "REJECT",
-                phase2_result.get("rejection_template"),
-                rejection_phase=2,
-            )
-
-            audit = AuditLoggerAgent()
-            audit.run(output_folder, source_folder, "REJECT", time.time() - start_time)
-            return {"decision": "REJECT", "phase": 2}
-
-        # Agent 5: Phase 3 Validation
-        phase3 = Phase3ValidatorAgent()
-        phase3_result = phase3.run(output_folder, extraction, phase2_result)
-
-        if phase3_result["decision"] == "REJECT":
-            transformer = TransformerAgent()
-            transformer_result = transformer.run(
-                output_folder, extraction, phase3_result
-            )
-
-            output_gen = OutputGeneratorAgent()
-            output_gen.run(
-                output_folder,
-                extraction,
-                transformer_result,
-                "REJECT",
-                phase3_result.get("rejection_template"),
-                rejection_phase=3,
-            )
-
-            audit = AuditLoggerAgent()
-            audit.run(output_folder, source_folder, "REJECT", time.time() - start_time)
-            return {"decision": "REJECT", "phase": 3}
-
-        # Agent 6: Phase 4 Validation
-        phase4 = Phase4ValidatorAgent()
-        phase4_result = phase4.run(output_folder, extraction, phase3_result)
-
-        # Agent 7: Transformer
-        transformer = TransformerAgent()
-        transformer_result = transformer.run(output_folder, extraction, phase4_result)
-
-        # Agent 8: Output Generator
-        output_gen = OutputGeneratorAgent()
-        output_gen.run(
-            output_folder,
-            extraction,
-            transformer_result,
-            phase4_result["decision"],
-            phase4_result.get("rejection_template"),
-            phase4_result.get("rejection_reason"),
-            rejection_phase=4 if phase4_result["decision"] == "REJECT" else None,
-        )
-
-        # Agent 9: Audit Logger
-        processing_time = time.time() - start_time
-        audit = AuditLoggerAgent()
-        audit.run(
-            output_folder, source_folder, phase4_result["decision"], processing_time
-        )
-
-        return {
-            "decision": phase4_result["decision"],
-            "processing_time": processing_time,
-            "output_folder": str(output_folder),
-        }
+        return _run_pipeline(source_folder, output_folder, start_time)
 
     except Exception as e:
         print(f"\n   Error: {e}")
-        import traceback
-
         traceback.print_exc()
 
         # Save error
@@ -1779,7 +1896,9 @@ def process_invoice(source_folder: Path) -> dict:
         error_file.write_text(f"Error: {e}\n\n{traceback.format_exc()}")
 
         audit = AuditLoggerAgent()
-        audit.run(output_folder, source_folder, "ERROR", time.time() - start_time)
+        audit.run(
+            output_folder, source_folder, "ERROR", time.time() - start_time
+        )
 
         return {"decision": "ERROR", "error": str(e)}
 
@@ -1790,13 +1909,19 @@ def process_invoice(source_folder: Path) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="General Invoice Processing Agent")
+    parser = argparse.ArgumentParser(
+        description="General Invoice Processing Agent"
+    )
     parser.add_argument(
         "--base-dir", "-b", type=str, help="Base directory with case folders"
     )
-    parser.add_argument("--case", "-c", type=str, help="Single case folder path")
+    parser.add_argument(
+        "--case", "-c", type=str, help="Single case folder path"
+    )
     parser.add_argument("--config", type=str, help="Path to config JSON file")
-    parser.add_argument("--num-cases", "-n", type=int, help="Limit number of cases")
+    parser.add_argument(
+        "--num-cases", "-n", type=int, help="Limit number of cases"
+    )
 
     args = parser.parse_args()
 

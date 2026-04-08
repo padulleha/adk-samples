@@ -12,10 +12,8 @@ ADK-transferable: single run() entry point, structured I/O.
 import random
 from dataclasses import dataclass, field
 
-from .case_loader import CaseLoaderAgent
-
 from ..shared_libraries.alf_engine import ConditionEvaluator
-
+from .case_loader import CaseLoaderAgent
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -120,7 +118,7 @@ class ImpactAssessorAgent:
             sampled_others = random.sample(
                 other_ids, min(sample_size - 1, len(other_ids))
             )
-            eval_case_ids = [target_case_id] + sampled_others
+            eval_case_ids = [target_case_id, *sampled_others]
             sampled = True
         else:
             eval_case_ids = all_case_ids
@@ -138,7 +136,9 @@ class ImpactAssessorAgent:
             context = all_contexts.get(case_id, {})
             if not context:
                 continue
-            all_passed, details = ConditionEvaluator.evaluate_all(context, conditions)
+            all_passed, details = ConditionEvaluator.evaluate_all(
+                context, conditions
+            )
 
             decision, rejection = self._get_case_summary(context)
 
@@ -185,7 +185,9 @@ class ImpactAssessorAgent:
         # Collateral matches
         if report.collateral_matches:
             lines.append("")
-            lines.append(f"  Collateral matches ({len(report.collateral_matches)}):")
+            lines.append(
+                f"  Collateral matches ({len(report.collateral_matches)}):"
+            )
             for cm in report.collateral_matches:
                 lines.append(f"    Case {cm.case_id}: MATCH (unintended)")
                 lines.append(f"      Current decision: {cm.decision}")
@@ -199,7 +201,9 @@ class ImpactAssessorAgent:
                             f"-> actual: {_truncate(det.get('actual'))}"
                         )
         else:
-            lines.append(f"  {len(report.safe_cases)} other cases: NO MATCH (safe)")
+            lines.append(
+                f"  {len(report.safe_cases)} other cases: NO MATCH (safe)"
+            )
 
         lines.append("")
 

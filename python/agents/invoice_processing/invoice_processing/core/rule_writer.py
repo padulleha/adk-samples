@@ -12,13 +12,11 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime
 
-from .config import RULE_BASE_PATH
-
 from ..shared_libraries.alf_engine import (
-    SUPPORTED_CONDITION_OPERATORS,
     SUPPORTED_ACTION_TYPES,
+    SUPPORTED_CONDITION_OPERATORS,
 )
-
+from .config import RULE_BASE_PATH
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -51,7 +49,7 @@ class RuleWriterAgent:
         """Load and return the current rule_base.json."""
         if not RULE_BASE_PATH.exists():
             raise FileNotFoundError(f"Rule base not found: {RULE_BASE_PATH}")
-        with open(RULE_BASE_PATH, "r", encoding="utf-8") as f:
+        with open(RULE_BASE_PATH, encoding="utf-8") as f:
             return json.load(f)
 
     def get_existing_rules(self) -> list[dict]:
@@ -136,7 +134,10 @@ class RuleWriterAgent:
                 warnings.append(f"Rule ID '{new_id}' already exists")
 
             # Same scope + same priority
-            if r.get("scope") == new_scope and r.get("priority") == new_priority:
+            if (
+                r.get("scope") == new_scope
+                and r.get("priority") == new_priority
+            ):
                 warnings.append(
                     f"Priority collision with {r['id']} in scope '{new_scope}' "
                     f"at priority {new_priority}"
@@ -174,7 +175,8 @@ class RuleWriterAgent:
                 success=False,
                 rule_id=rule_dict.get("id", "?"),
                 mode=mode,
-                message="Validation errors:\n" + "\n".join(f"  - {e}" for e in errors),
+                message="Validation errors:\n"
+                + "\n".join(f"  - {e}" for e in errors),
             )
 
         # Load current rule base
@@ -288,16 +290,8 @@ class RuleWriterAgent:
             f"Backup: {backup_path.name}",
         )
 
-    def format_rule_display(self, rule_dict: dict) -> str:
-        """Format a rule dict for terminal display."""
-        lines = []
-        lines.append(f"=== Proposed Rule: {rule_dict.get('id', '?')} ===")
-        lines.append(f"Name: {rule_dict.get('name', '?')}")
-        lines.append(f"Description: {rule_dict.get('description', '?')}")
-        lines.append(f"Scope: {rule_dict.get('scope', '?')}")
-        lines.append(f"Priority: {rule_dict.get('priority', '?')}")
-        lines.append("")
-
+    def _format_conditions(self, rule_dict: dict, lines: list) -> None:
+        """Append formatted conditions to display lines."""
         lines.append("Conditions:")
         for i, c in enumerate(rule_dict.get("conditions", []), 1):
             desc = c.get("description", "")
@@ -312,12 +306,15 @@ class RuleWriterAgent:
             if desc:
                 lines.append(f"     ({desc})")
 
-        lines.append("")
+    def _format_actions(self, rule_dict: dict, lines: list) -> None:
+        """Append formatted actions to display lines."""
         lines.append("Actions:")
         for i, a in enumerate(rule_dict.get("actions", []), 1):
             action_type = a.get("type", "?")
             if action_type == "llm_continue_processing":
-                lines.append(f"  {i}. {action_type} from {a.get('resume_from', '?')}")
+                lines.append(
+                    f"  {i}. {action_type} from {a.get('resume_from', '?')}"
+                )
                 ctx = a.get("correction_context", "")
                 if ctx:
                     # Show first 200 chars
@@ -328,6 +325,8 @@ class RuleWriterAgent:
             else:
                 lines.append(f"  {i}. {action_type}")
 
+    def _format_metadata(self, rule_dict: dict, lines: list) -> None:
+        """Append formatted metadata to display lines if present."""
         meta = rule_dict.get("metadata", {})
         if meta:
             lines.append("")
@@ -338,5 +337,20 @@ class RuleWriterAgent:
                 lines.append(f"  Root cause: {meta['root_cause']}")
             if meta.get("rules_book_section"):
                 lines.append(f"  Rules book: {meta['rules_book_section']}")
+
+    def format_rule_display(self, rule_dict: dict) -> str:
+        """Format a rule dict for terminal display."""
+        lines = []
+        lines.append(f"=== Proposed Rule: {rule_dict.get('id', '?')} ===")
+        lines.append(f"Name: {rule_dict.get('name', '?')}")
+        lines.append(f"Description: {rule_dict.get('description', '?')}")
+        lines.append(f"Scope: {rule_dict.get('scope', '?')}")
+        lines.append(f"Priority: {rule_dict.get('priority', '?')}")
+        lines.append("")
+
+        self._format_conditions(rule_dict, lines)
+        lines.append("")
+        self._format_actions(rule_dict, lines)
+        self._format_metadata(rule_dict, lines)
 
         return "\n".join(lines)

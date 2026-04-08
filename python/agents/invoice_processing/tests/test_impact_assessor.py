@@ -2,13 +2,26 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "invoice_processing"))
+from invoice_processing.core.impact_assessor import (
+    CaseMatch,
+    ImpactAssessorAgent,
+    ImpactReport,
+    _truncate,
+)
 
-from core.impact_assessor import ImpactAssessorAgent, ImpactReport, CaseMatch, _truncate
-
+_SMALL_CASE_COUNT = 5
+_LARGE_CASE_COUNT = 50
+_DEFAULT_SAMPLE_SIZE = 10
+_SMALL_SAMPLE_SIZE = 5
+_EXPECTED_SAFE_ALL = 4
+_EXPECTED_SAFE_SAMPLED = 9
+_EXACT_SAMPLE_COUNT = 10
 
 # ---------------------------------------------------------------------------
 # _truncate helper
@@ -43,7 +56,10 @@ class TestGetCaseSummary:
 
     def test_phase1_reject(self):
         context = {
-            "phase1": {"decision": "REJECT", "rejection_template": "wrong company"},
+            "phase1": {
+                "decision": "REJECT",
+                "rejection_template": "wrong company",
+            },
             "phase2": {},
         }
         decision, reason = self.agent._get_case_summary(context)
@@ -55,7 +71,10 @@ class TestGetCaseSummary:
             "phase1": {"decision": "ACCEPT"},
             "phase2": {"decision": "ACCEPT"},
             "phase3": {"decision": "ACCEPT"},
-            "phase4": {"decision": "SET_ASIDE", "rejection_template": "needs review"},
+            "phase4": {
+                "decision": "SET_ASIDE",
+                "rejection_template": "needs review",
+            },
         }
         decision, reason = self.agent._get_case_summary(context)
         assert decision == "SET_ASIDE"
@@ -164,7 +183,10 @@ class TestImpactAssessorRun:
             },
             "case_001": {
                 "decision_phase1": "REJECT",
-                "phase1": {"decision": "REJECT", "rejection_template": "GST error"},
+                "phase1": {
+                    "decision": "REJECT",
+                    "rejection_template": "GST error",
+                },
                 "invoice": {"customer_name": "ACME Corp"},
             },
             "case_002": {
@@ -176,7 +198,11 @@ class TestImpactAssessorRun:
 
         with patch.object(agent, "_load_all_contexts", return_value=contexts):
             conditions = [
-                {"field": "decision_phase1", "operator": "equals", "value": "REJECT"},
+                {
+                    "field": "decision_phase1",
+                    "operator": "equals",
+                    "value": "REJECT",
+                },
                 {
                     "field": "phase1.rejection_template",
                     "operator": "contains",
@@ -192,7 +218,9 @@ class TestImpactAssessorRun:
 
         assert report.target_matched is True
         assert len(report.collateral_matches) == 0
-        assert "case_001" in report.safe_cases or "case_002" in report.safe_cases
+        assert (
+            "case_001" in report.safe_cases or "case_002" in report.safe_cases
+        )
         assert "safe to apply" in report.summary.lower()
 
 
@@ -224,35 +252,47 @@ class TestSampling:
         return agent
 
     def test_no_sampling_when_fewer_than_sample_size(self):
-        contexts = _make_contexts(5)
+        contexts = _make_contexts(_SMALL_CASE_COUNT)
         agent = self._make_agent(contexts)
         conditions = [
-            {"field": "decision_phase1", "operator": "equals", "value": "REJECT"}
+            {
+                "field": "decision_phase1",
+                "operator": "equals",
+                "value": "REJECT",
+            }
         ]
 
-        report = agent.run(conditions, "case_target", sample_size=10)
+        report = agent.run(
+            conditions, "case_target", sample_size=_DEFAULT_SAMPLE_SIZE
+        )
 
         assert report.sampled is False
-        assert report.total_cases == 5
-        assert report.sample_size == 5
+        assert report.total_cases == _SMALL_CASE_COUNT
+        assert report.sample_size == _SMALL_CASE_COUNT
         # All non-target cases should be in safe_cases
-        assert len(report.safe_cases) == 4
+        assert len(report.safe_cases) == _EXPECTED_SAFE_ALL
         assert "Scanning 5 cases" in report.summary
 
     def test_sampling_when_more_than_sample_size(self):
-        contexts = _make_contexts(50)
+        contexts = _make_contexts(_LARGE_CASE_COUNT)
         agent = self._make_agent(contexts)
         conditions = [
-            {"field": "decision_phase1", "operator": "equals", "value": "REJECT"}
+            {
+                "field": "decision_phase1",
+                "operator": "equals",
+                "value": "REJECT",
+            }
         ]
 
-        report = agent.run(conditions, "case_target", sample_size=10)
+        report = agent.run(
+            conditions, "case_target", sample_size=_DEFAULT_SAMPLE_SIZE
+        )
 
         assert report.sampled is True
-        assert report.total_cases == 50
-        assert report.sample_size == 10
+        assert report.total_cases == _LARGE_CASE_COUNT
+        assert report.sample_size == _DEFAULT_SAMPLE_SIZE
         # Only 9 non-target cases should be evaluated (10 - 1 target)
-        assert len(report.safe_cases) == 9
+        assert len(report.safe_cases) == _EXPECTED_SAFE_SAMPLED
         assert "Sampled 10 of 50" in report.summary
         assert "NOTE:" in report.summary
 
@@ -260,22 +300,34 @@ class TestSampling:
         contexts = _make_contexts(100)
         agent = self._make_agent(contexts)
         conditions = [
-            {"field": "decision_phase1", "operator": "equals", "value": "REJECT"}
+            {
+                "field": "decision_phase1",
+                "operator": "equals",
+                "value": "REJECT",
+            }
         ]
 
-        report = agent.run(conditions, "case_target", sample_size=5)
+        report = agent.run(
+            conditions, "case_target", sample_size=_SMALL_SAMPLE_SIZE
+        )
 
         assert report.target_matched is True
-        assert report.sample_size == 5
+        assert report.sample_size == _SMALL_SAMPLE_SIZE
 
     def test_sampling_summary_includes_note(self):
         contexts = _make_contexts(20)
         agent = self._make_agent(contexts)
         conditions = [
-            {"field": "decision_phase1", "operator": "equals", "value": "ACCEPT"}
+            {
+                "field": "decision_phase1",
+                "operator": "equals",
+                "value": "ACCEPT",
+            }
         ]
 
-        report = agent.run(conditions, "case_target", sample_size=5)
+        report = agent.run(
+            conditions, "case_target", sample_size=_SMALL_SAMPLE_SIZE
+        )
 
         assert report.sampled is True
         assert "NOTE: Only 5 of 20 cases" in report.summary
@@ -285,10 +337,16 @@ class TestSampling:
         contexts = _make_contexts(10)
         agent = self._make_agent(contexts)
         conditions = [
-            {"field": "decision_phase1", "operator": "equals", "value": "REJECT"}
+            {
+                "field": "decision_phase1",
+                "operator": "equals",
+                "value": "REJECT",
+            }
         ]
 
-        report = agent.run(conditions, "case_target", sample_size=10)
+        report = agent.run(
+            conditions, "case_target", sample_size=_EXACT_SAMPLE_COUNT
+        )
 
         assert report.sampled is False
-        assert report.sample_size == 10
+        assert report.sample_size == _EXACT_SAMPLE_COUNT

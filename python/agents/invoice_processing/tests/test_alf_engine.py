@@ -7,15 +7,21 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "invoice_processing"))
-
-from shared_libraries.alf_engine import (
-    ALFEngine,
-    RuleAggregator,
-    SUPPORTED_CONDITION_OPERATORS,
-    SUPPORTED_ACTION_TYPES,
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
 )
 
+from invoice_processing.shared_libraries.alf_engine import (
+    SUPPORTED_ACTION_TYPES,
+    SUPPORTED_CONDITION_OPERATORS,
+    ALFEngine,
+    Rule,
+    RuleAggregator,
+)
+
+_MIN_CONDITION_OPERATORS = 19
+_MIN_ACTION_TYPES = 10
+_EXPECTED_RULE_COUNT = 2
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -25,7 +31,7 @@ from shared_libraries.alf_engine import (
 class TestConstants:
     def test_supported_operators_is_set(self):
         assert isinstance(SUPPORTED_CONDITION_OPERATORS, set)
-        assert len(SUPPORTED_CONDITION_OPERATORS) >= 19
+        assert len(SUPPORTED_CONDITION_OPERATORS) >= _MIN_CONDITION_OPERATORS
 
     def test_key_operators_present(self):
         for op in [
@@ -42,7 +48,7 @@ class TestConstants:
 
     def test_supported_actions_is_set(self):
         assert isinstance(SUPPORTED_ACTION_TYPES, set)
-        assert len(SUPPORTED_ACTION_TYPES) >= 10
+        assert len(SUPPORTED_ACTION_TYPES) >= _MIN_ACTION_TYPES
 
     def test_key_actions_present(self):
         for action in [
@@ -152,7 +158,9 @@ class TestSchemaValidation:
             "rules": [
                 {
                     "name": "No ID",
-                    "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                    "conditions": [
+                        {"field": "x", "operator": "equals", "value": "y"}
+                    ],
                     "actions": [{"type": "set_field"}],
                 }
             ],
@@ -190,7 +198,9 @@ class TestSchemaValidation:
             "rules": [
                 {
                     "id": "ALF-001",
-                    "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                    "conditions": [
+                        {"field": "x", "operator": "equals", "value": "y"}
+                    ],
                     "actions": [{"type": "teleport"}],
                 }
             ],
@@ -231,7 +241,9 @@ class TestRuleQueries:
                 "id": "ALF-002",
                 "name": "Tagged",
                 "tags": ["phase1", "override"],
-                "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                "conditions": [
+                    {"field": "x", "operator": "equals", "value": "y"}
+                ],
                 "actions": [{"type": "set_field"}],
             }
         )
@@ -244,11 +256,13 @@ class TestRuleQueries:
             {
                 "id": "ALF-003",
                 "name": "New",
-                "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                "conditions": [
+                    {"field": "x", "operator": "equals", "value": "y"}
+                ],
                 "actions": [{"type": "set_field"}],
             }
         )
-        assert len(self.engine.rules) == 2
+        assert len(self.engine.rules) == _EXPECTED_RULE_COUNT
 
     def test_add_duplicate_id_raises(self):
         with pytest.raises(ValueError, match="ALF-001"):
@@ -283,12 +297,16 @@ class TestConsistencyValidation:
             "rules": [
                 {
                     "id": "ALF-001",
-                    "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                    "conditions": [
+                        {"field": "x", "operator": "equals", "value": "y"}
+                    ],
                     "actions": [{"type": "set_field"}],
                 },
                 {
                     "id": "ALF-001",
-                    "conditions": [{"field": "a", "operator": "equals", "value": "b"}],
+                    "conditions": [
+                        {"field": "a", "operator": "equals", "value": "b"}
+                    ],
                     "actions": [{"type": "set_field"}],
                 },
             ],
@@ -316,7 +334,9 @@ class TestSaveRuleBase:
                 {
                     "id": "ALF-002",
                     "name": "Second",
-                    "conditions": [{"field": "x", "operator": "equals", "value": "y"}],
+                    "conditions": [
+                        {"field": "x", "operator": "equals", "value": "y"}
+                    ],
                     "actions": [{"type": "set_field"}],
                 }
             )
@@ -326,7 +346,7 @@ class TestSaveRuleBase:
 
             with open(out_path) as f:
                 saved = json.load(f)
-            assert len(saved["rules"]) == 2
+            assert len(saved["rules"]) == _EXPECTED_RULE_COUNT
             assert saved["schema_version"] == "2.0.0"
             out_path.unlink()
         finally:
@@ -348,16 +368,18 @@ class TestRuleAggregatorCollect:
                 "priority": 50,
                 "enabled": True,
                 "conditions": [
-                    {"field": "decision", "operator": "equals", "value": "REJECT"}
+                    {
+                        "field": "decision",
+                        "operator": "equals",
+                        "value": "REJECT",
+                    }
                 ],
                 "actions": [{"type": "override_decision", "value": "ACCEPT"}],
             }
         ]
         context = {"decision": "REJECT"}
-        from shared_libraries.alf_engine import Rule
-
         rule_objects = [Rule(r) for r in rules]
-        matched, audit, _ = RuleAggregator.collect(rule_objects, context)
+        matched, _audit, _ = RuleAggregator.collect(rule_objects, context)
         assert len(matched) == 1
 
     def test_scope_mutual_exclusion(self):
@@ -369,7 +391,9 @@ class TestRuleAggregatorCollect:
                 "scope": "same_scope",
                 "priority": 50,
                 "enabled": True,
-                "conditions": [{"field": "x", "operator": "equals", "value": "yes"}],
+                "conditions": [
+                    {"field": "x", "operator": "equals", "value": "yes"}
+                ],
                 "actions": [{"type": "set_field"}],
             },
             {
@@ -378,13 +402,13 @@ class TestRuleAggregatorCollect:
                 "scope": "same_scope",
                 "priority": 60,
                 "enabled": True,
-                "conditions": [{"field": "x", "operator": "equals", "value": "yes"}],
+                "conditions": [
+                    {"field": "x", "operator": "equals", "value": "yes"}
+                ],
                 "actions": [{"type": "set_field"}],
             },
         ]
         context = {"x": "yes"}
-        from shared_libraries.alf_engine import Rule
-
         rule_objects = [Rule(r) for r in rules]
         matched, _, _ = RuleAggregator.collect(rule_objects, context)
         assert len(matched) == 1

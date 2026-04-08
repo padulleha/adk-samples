@@ -264,6 +264,9 @@ Return the complete revised rule JSON.
 # ---------------------------------------------------------------------------
 
 
+_MAX_PROMPT_CHARS = 8000
+
+
 def extract_relevant_rules_book_sections(
     rules_book_text: str,
     failing_phase: str,
@@ -291,7 +294,9 @@ def extract_relevant_rules_book_sections(
     # Also always include pipeline overview and exception handling
     always_include = ["## 1. Pipeline Overview", "## 9. Exception Handling"]
 
-    relevant_headers = phase_headers.get(failing_phase.lower().replace(" ", ""), [])
+    relevant_headers = phase_headers.get(
+        failing_phase.lower().replace(" ", ""), []
+    )
     relevant_headers.extend(always_include)
 
     for line in lines:
@@ -312,7 +317,7 @@ def extract_relevant_rules_book_sections(
     result = "\n\n---\n\n".join(sections)
 
     # Truncate if too long (max ~8K chars)
-    if len(result) > 8000:
-        result = result[:8000] + "\n\n[...truncated...]"
+    if len(result) > _MAX_PROMPT_CHARS:
+        result = result[:_MAX_PROMPT_CHARS] + "\n\n[...truncated...]"
 
     return result if result else "(No relevant rules book sections found)"

@@ -8,28 +8,27 @@ ADK-transferable: single run() entry point, structured I/O.
 """
 
 import json
+import logging
 import re
 import time
-import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
 
+from .case_loader import CaseData
 from .config import (
-    LLM_PROJECT_ID,
+    LLM_CALL_DELAY,
     LLM_LOCATION,
     LLM_MODEL,
-    LLM_CALL_DELAY,
+    LLM_PROJECT_ID,
     RULES_BOOK_PATH,
 )
-from .case_loader import CaseData
-from .rule_writer import RuleWriterAgent
 from .prompts import (
     RULE_DISCOVERY_SYSTEM_PROMPT,
     RULE_DISCOVERY_TASK_TEMPLATE,
     RULE_REVISION_TASK_TEMPLATE,
     extract_relevant_rules_book_sections,
 )
+from .rule_writer import RuleWriterAgent
 
 logger = logging.getLogger("LearningAgent.RuleDiscoverer")
 
@@ -64,11 +63,15 @@ class _LLMClient:
     @classmethod
     def get_model(cls):
         if cls._model is None:
-            from google.cloud import aiplatform
-            from vertexai.generative_models import GenerativeModel
+            from google.cloud import aiplatform  # noqa: PLC0415
+            from vertexai.generative_models import (  # noqa: PLC0415
+                GenerativeModel,
+            )
 
             if not LLM_PROJECT_ID:
-                raise ValueError("PROJECT_ID not set. Export it or add to .env file.")
+                raise ValueError(
+                    "PROJECT_ID not set. Export it or add to .env file."
+                )
             aiplatform.init(project=LLM_PROJECT_ID, location=LLM_LOCATION)
             cls._model = GenerativeModel(LLM_MODEL)
             logger.info(f"Initialized {LLM_MODEL} (project={LLM_PROJECT_ID})")
@@ -91,37 +94,38 @@ class _LLMClient:
 # ---------------------------------------------------------------------------
 
 
-def _parse_json_response(text: str) -> dict:
-    """Parse JSON from LLM response, handling markdown blocks and trailing text."""
-    clean = text.strip()
+def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences from text, returning the inner content."""
+    if not text.startswith("```"):
+        return text
+    lines = text.split("\n")
+    json_lines = []
+    in_block = False
+    for line in lines:
+        if line.strip().startswith("```"):
+            if in_block:
+                break
+            in_block = True
+            continue
+        elif in_block:
+            json_lines.append(line)
+    if json_lines:
+        return "\n".join(json_lines).strip()
+    return text
 
-    # Remove markdown code blocks
-    if clean.startswith("```"):
-        lines = clean.split("\n")
-        json_lines = []
-        in_block = False
-        for line in lines:
-            if line.strip().startswith("```"):
-                if in_block:
-                    break
-                in_block = True
-                continue
-            elif in_block:
-                json_lines.append(line)
-        if json_lines:
-            clean = "\n".join(json_lines).strip()
 
-    # Find JSON object
-    start = clean.find("{")
+def _extract_json_object(text: str) -> str:
+    """Extract the outermost JSON object from text by matching braces."""
+    start = text.find("{")
     if start == -1:
         raise ValueError("No JSON object found in LLM response")
 
     brace_count = 0
     end = -1
-    for i in range(start, len(clean)):
-        if clean[i] == "{":
+    for i in range(start, len(text)):
+        if text[i] == "{":
             brace_count += 1
-        elif clean[i] == "}":
+        elif text[i] == "}":
             brace_count -= 1
             if brace_count == 0:
                 end = i + 1
@@ -130,7 +134,13 @@ def _parse_json_response(text: str) -> dict:
     if end == -1:
         raise ValueError("Unclosed JSON object in LLM response")
 
-    json_str = clean[start:end]
+    return text[start:end]
+
+
+def _parse_json_response(text: str) -> dict:
+    """Parse JSON from LLM response, handling markdown blocks and trailing text."""
+    clean = _strip_markdown_fences(text.strip())
+    json_str = _extract_json_object(clean)
     # Fix trailing commas
     json_str = re.sub(r",(\s*[}\]])", r"\1", json_str)
     return json.loads(json_str)
@@ -151,13 +161,13 @@ class RuleDiscovererAgent:
 
     def __init__(self):
         self._writer = RuleWriterAgent()
-        self._rules_book_cache: Optional[str] = None
+        self._rules_book_cache: str | None = None
 
     def _load_rules_book(self) -> str:
         """Load the reconstructed rules book (cached)."""
         if self._rules_book_cache is None:
             if RULES_BOOK_PATH.exists():
-                with open(RULES_BOOK_PATH, "r", encoding="utf-8") as f:
+                with open(RULES_BOOK_PATH, encoding="utf-8") as f:
                     self._rules_book_cache = f.read()
             else:
                 self._rules_book_cache = "(Rules book not found)"
@@ -203,7 +213,9 @@ class RuleDiscovererAgent:
                         lines.append(f"    Evidence: {evidence[:200]}")
                     if tmpl:
                         lines.append(f"    Template: {tmpl}")
-        return "\n".join(lines) if lines else "(no validation details available)"
+        return (
+            "\n".join(lines) if lines else "(no validation details available)"
+        )
 
     def run(
         self,
@@ -226,9 +238,9 @@ class RuleDiscovererAgent:
         failing_phase, failing_step, rejection_reason = self._get_failing_info(
             case_data
         )
-        agent_decision = case_data.postprocessing.get("Invoice Processing", {}).get(
-            "Invoice Status", "Unknown"
-        )
+        agent_decision = case_data.postprocessing.get(
+            "Invoice Processing", {}
+        ).get("Invoice Status", "Unknown")
 
         # Get existing rules and scopes
         existing_rules = self._writer.get_existing_rules()
@@ -257,7 +269,9 @@ class RuleDiscovererAgent:
             case_summary=case_data.summary,
             validation_details=self._build_validation_details(case_data),
             invoice_json=json.dumps(invoice, indent=2, default=str)[:3000],
-            extraction_json=json.dumps(extraction, indent=2, default=str)[:3000],
+            extraction_json=json.dumps(extraction, indent=2, default=str)[
+                :3000
+            ],
             existing_rules_json=json.dumps(
                 [
                     {
@@ -275,7 +289,9 @@ class RuleDiscovererAgent:
             next_rule_id=next_id,
         )
 
-        full_prompt = RULE_DISCOVERY_SYSTEM_PROMPT + "\n\n===TASK===\n" + task_prompt
+        full_prompt = (
+            RULE_DISCOVERY_SYSTEM_PROMPT + "\n\n===TASK===\n" + task_prompt
+        )
 
         # Call LLM
         try:
@@ -347,12 +363,16 @@ class RuleDiscovererAgent:
             case_id=case_data.case_id,
             case_summary=case_data.summary,
             invoice_json=json.dumps(invoice, indent=2, default=str)[:3000],
-            extraction_json=json.dumps(extraction, indent=2, default=str)[:3000],
+            extraction_json=json.dumps(extraction, indent=2, default=str)[
+                :3000
+            ],
             rule_id=current_rule.get("id", "?"),
         )
 
         full_prompt = (
-            RULE_DISCOVERY_SYSTEM_PROMPT + "\n\n===REVISION TASK===\n" + task_prompt
+            RULE_DISCOVERY_SYSTEM_PROMPT
+            + "\n\n===REVISION TASK===\n"
+            + task_prompt
         )
 
         try:

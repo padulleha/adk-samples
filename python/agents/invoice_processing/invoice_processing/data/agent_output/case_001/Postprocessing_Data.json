@@ -18,6 +18,6 @@
   },
   "Line Items": "[{\"line_number\": 1, \"item_code\": \"LABOUR_AH\", \"description\": \"Emergency call-out - overtime rate\", \"quantity\": \"5.80\", \"unit_cost\": \"110.00\", \"line_cost\": \"638.00\", \"tax\": \"95.70\", \"tax_code\": \"TAX\"}]",
   "Outcome Message": {
-    "Outcome Message": "Invoice rejected on 02/04/2026 15:39:02: Vendor tax ID invalid"
+    "Outcome Message": "Invoice rejected on 08/04/2026 05:22:36: Vendor tax ID invalid"
   }
 }

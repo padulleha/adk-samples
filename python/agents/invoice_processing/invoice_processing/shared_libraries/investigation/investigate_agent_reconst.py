@@ -54,25 +54,29 @@ Usage:
     python investigate_agent_reconst.py --phase-filter "Phase 2"
 """
 
-import os
-import sys
-import json
 import argparse
-import re
-import time
 import hashlib
-from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
-from datetime import datetime
-from collections import defaultdict, Counter
+import json
+import os
+import re
+import sys
+import time
+import traceback
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, ClassVar
 
 # Third-party imports
 try:
-    from google.cloud import aiplatform
-    from vertexai.preview.generative_models import GenerativeModel, GenerationConfig
-    from pydantic import BaseModel, Field
     from dotenv import load_dotenv
+    from google.cloud import aiplatform
+    from pydantic import BaseModel, Field
+    from vertexai.preview.generative_models import (
+        GenerationConfig,
+        GenerativeModel,
+    )
 except ImportError:
     print("Error: Missing required package. Install with:")
     print("pip install google-cloud-aiplatform pydantic python-dotenv")
@@ -86,17 +90,25 @@ AGENT_PKG_DIR = Path(__file__).resolve().parent.parent.parent
 PROJECT_ROOT = AGENT_PKG_DIR.parent.parent.parent
 
 # Master data loader — provides domain-agnostic configuration
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # shared_libraries/
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)  # shared_libraries/
 try:
-    from master_data_loader import load_master_data, MasterData
+    from master_data_loader import MasterData, load_master_data
 
     _MASTER_DATA_AVAILABLE = True
 except ImportError:
     _MASTER_DATA_AVAILABLE = False
     MasterData = None  # type hint fallback
 
-# Module-level master data instance (set in main())
-_MASTER_DATA: "Optional[MasterData]" = None
+# Module-level master data container (set in main() via dict to avoid `global`)
+_master_data_container: dict[str, Any] = {"instance": None}
+
+
+def _get_master_data() -> "MasterData | None":
+    """Return the module-level master data instance (may be None)."""
+    return _master_data_container["instance"]
+
 
 _env_file = PROJECT_ROOT / ".env"
 if _env_file.exists():
@@ -108,44 +120,73 @@ else:
 # CONFIGURATION
 # ============================================================================
 INPUT_BASE_DIR = AGENT_PKG_DIR / "exemplary_data"  # Ground truth / input cases
-AGENT_OUTPUT_DIR = AGENT_PKG_DIR / "data" / "agent_output"  # Agent output directory
+AGENT_OUTPUT_DIR = (
+    AGENT_PKG_DIR / "data" / "agent_output"
+)  # Agent output directory
 
 # Use reconstructed_rules_book.md from shared data directory
 RULES_BOOK_PATH = AGENT_PKG_DIR / "data" / "reconstructed_rules_book.md"
+
+# ============================================================================
+# NAMED CONSTANTS (extracted from magic values for PLR2004)
+# ============================================================================
+_MIN_SECTION_LINES = 5
+_HIGH_CONFIDENCE_THRESHOLD = 0.95
+_OVERLAP_THRESHOLD = 0.75
+_WAF_HOURS_STEP = 33
+_BALANCE_TOLERANCE = 0.02
+_FULL_COMPLIANCE_SCORE = 100
+_PARTIAL_COMPLIANCE_THRESHOLD = 60
+_MAX_PARTIAL_VIOLATIONS = 2
+_COMPLETE_EXTRACTION_THRESHOLD = 90
+_PARTIAL_EXTRACTION_THRESHOLD = 70
+_MAX_LINE_WIDTH = 75
 
 # Output directory for investigation results (used by batch runner only)
 INVESTIGATION_OUTPUT_DIR = AGENT_PKG_DIR / "data" / "investigation_output"
 
 # GCP Configuration (lazy -- resolved at call time for deployment compatibility)
-PROJECT_ID = None  # Set by _ensure_gcp_initialized()
-LOCATION = os.getenv("LOCATION", "us-central1")
-GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
+# Stored in a mutable dict so helpers can update without `global` statements.
+_gcp_config: dict[str, Any] = {
+    "PROJECT_ID": None,
+    "LOCATION": os.getenv("LOCATION", "us-central1"),
+    "GEMINI_PRO_MODEL": os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro"),
+    "initialized": False,
+}
 
-_gcp_initialized = False
+# Module-level aliases kept for backward compatibility (read-only convenience).
+PROJECT_ID = _gcp_config["PROJECT_ID"]
+LOCATION = _gcp_config["LOCATION"]
+GEMINI_PRO_MODEL = _gcp_config["GEMINI_PRO_MODEL"]
 
 
 def _ensure_gcp_initialized():
     """Lazy-initialize GCP/Vertex AI on first use (not at import time).
 
     Agent Engine sets env vars after module import, so we must defer."""
-    global PROJECT_ID, LOCATION, GEMINI_PRO_MODEL, _gcp_initialized
-    if _gcp_initialized:
+    if _gcp_config["initialized"]:
         return
-    PROJECT_ID = (
+    _gcp_config["PROJECT_ID"] = (
         os.getenv("PROJECT_ID")
         or os.getenv("GOOGLE_CLOUD_PROJECT")
         or os.getenv("GOOGLE_CLOUD_PROJECT_ID")
         or os.getenv("GCP_PROJECT")
     )
-    LOCATION = os.getenv("LOCATION") or os.getenv("GOOGLE_CLOUD_REGION", "us-central1")
-    GEMINI_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
-    if not PROJECT_ID:
+    _gcp_config["LOCATION"] = os.getenv("LOCATION") or os.getenv(
+        "GOOGLE_CLOUD_REGION", "us-central1"
+    )
+    _gcp_config["GEMINI_PRO_MODEL"] = os.getenv(
+        "GEMINI_PRO_MODEL", "gemini-2.5-pro"
+    )
+    if not _gcp_config["PROJECT_ID"]:
         raise RuntimeError(
             "PROJECT_ID not found in environment. "
             "Set it in .env file or export PROJECT_ID=your-gcp-project-id"
         )
-    aiplatform.init(project=PROJECT_ID, location=LOCATION)
-    _gcp_initialized = True
+    aiplatform.init(
+        project=_gcp_config["PROJECT_ID"], location=_gcp_config["LOCATION"]
+    )
+    _gcp_config["initialized"] = True
 
 
 # ============================================================================
@@ -175,16 +216,22 @@ class InvestigationConfig:
 
     # Retry configuration for LLM calls
     llm_max_retries: int = 3
-    llm_retry_base_delay: float = 1.0  # Seconds, doubles each retry (1s, 2s, 4s)
+    llm_retry_base_delay: float = (
+        1.0  # Seconds, doubles each retry (1s, 2s, 4s)
+    )
 
     # Tolerance configuration - v1.5.0: INCREASED margin for borderline cases
-    investigator_margin: float = 0.25  # 25% extra margin for borderline cases (was 15%)
+    investigator_margin: float = (
+        0.25  # 25% extra margin for borderline cases (was 15%)
+    )
 
     # Cautious mode flags - v1.5.0: More conservative defaults
     require_multiple_evidence: bool = (
         True  # Require 2+ evidence points for violation (was False)
     )
-    exclude_infrastructure_failures: bool = True  # Don't count 503s as violations
+    exclude_infrastructure_failures: bool = (
+        True  # Don't count 503s as violations
+    )
     treat_ambiguous_as_compliant: bool = (
         True  # Benefit of the doubt for ambiguous cases
     )
@@ -233,38 +280,36 @@ class InvestigationConfig:
 
         rules_data = group.get("rules", [])
         if isinstance(rules_data, list):
-            for rule in rules_data:
-                if not isinstance(rule, dict):
-                    continue
-                # Look for investigator confidence thresholds
-                if (
-                    rule.get("rule_id") == "investigator_confidence_thresholds"
-                    or "confidence" in str(rule.get("description", "")).lower()
-                ):
-                    if "min_violation_confidence" in rule:
-                        config.min_violation_confidence = float(
-                            rule["min_violation_confidence"]
-                        )
-                    if "min_ambiguous_confidence" in rule:
-                        config.min_ambiguous_confidence = float(
-                            rule["min_ambiguous_confidence"]
-                        )
-                    if "investigator_margin" in rule:
-                        config.investigator_margin = float(rule["investigator_margin"])
-                    break
+            config._apply_thresholds_from_list(rules_data)
         elif isinstance(rules_data, dict):
-            if "min_violation_confidence" in rules_data:
-                config.min_violation_confidence = float(
-                    rules_data["min_violation_confidence"]
-                )
-            if "min_ambiguous_confidence" in rules_data:
-                config.min_ambiguous_confidence = float(
-                    rules_data["min_ambiguous_confidence"]
-                )
-            if "investigator_margin" in rules_data:
-                config.investigator_margin = float(rules_data["investigator_margin"])
+            config._apply_thresholds_from_dict(rules_data)
 
         return config
+
+    def _apply_thresholds_from_list(self, rules_data: list) -> None:
+        """Apply confidence thresholds from a list of rule dicts."""
+        for rule in rules_data:
+            if not isinstance(rule, dict):
+                continue
+            if (
+                rule.get("rule_id") == "investigator_confidence_thresholds"
+                or "confidence" in str(rule.get("description", "")).lower()
+            ):
+                self._apply_thresholds_from_dict(rule)
+                break
+
+    def _apply_thresholds_from_dict(self, data: dict) -> None:
+        """Apply confidence thresholds from a single dict."""
+        if "min_violation_confidence" in data:
+            self.min_violation_confidence = float(
+                data["min_violation_confidence"]
+            )
+        if "min_ambiguous_confidence" in data:
+            self.min_ambiguous_confidence = float(
+                data["min_ambiguous_confidence"]
+            )
+        if "investigator_margin" in data:
+            self.investigator_margin = float(data["investigator_margin"])
 
 
 # Global config instance (can be overridden)
@@ -277,7 +322,9 @@ if RULES_BOOK_PATH.exists():
     RULES_BOOK_CONTENT = RULES_BOOK_PATH.read_text(encoding="utf-8")
     print(f"Loaded rules book: {RULES_BOOK_PATH.name}")
 else:
-    print(f"Warning: reconstructed_rules_book.md not found at {RULES_BOOK_PATH}")
+    print(
+        f"Warning: reconstructed_rules_book.md not found at {RULES_BOOK_PATH}"
+    )
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -295,38 +342,39 @@ class CaseProcessingSummary(BaseModel):
 
     # Processing trace
     invoice_type: str = Field(description="From classification step")
-    vendor_name: Optional[str] = None
-    invoice_total: Optional[float] = None
-    invoice_date: Optional[str] = None
+    vendor_name: str | None = None
+    invoice_total: float | None = None
+    invoice_date: str | None = None
 
     # Phase results
     phase1_result: str = Field(description="Continue, Reject, Set Aside")
-    phase1_reason: Optional[str] = None
+    phase1_reason: str | None = None
 
     phase2_result: str
-    phase2_reason: Optional[str] = None
+    phase2_reason: str | None = None
 
     phase2_5_result: str = Field(
         default="Continue", description="External validation result"
     )
-    phase2_5_reason: Optional[str] = None
+    phase2_5_reason: str | None = None
 
     phase3_result: str
-    phase3_reason: Optional[str] = None
+    phase3_reason: str | None = None
 
     phase4_result: str
-    phase4_reason: Optional[str] = None
+    phase4_reason: str | None = None
 
     # Exception handling
-    exceptions_applied: List[str] = Field(default_factory=list)
+    exceptions_applied: list[str] = Field(default_factory=list)
 
     # First rejection point (if any)
-    first_rejection_phase: Optional[str] = None
-    first_rejection_reason: Optional[str] = None
+    first_rejection_phase: str | None = None
+    first_rejection_reason: str | None = None
 
     # Preprocessing data quality
-    preprocessing_issues: List[str] = Field(
-        default_factory=list, description="Missing or problematic preprocessing fields"
+    preprocessing_issues: list[str] = Field(
+        default_factory=list,
+        description="Missing or problematic preprocessing fields",
     )
 
 
@@ -335,11 +383,11 @@ class DataSourceValidation(BaseModel):
 
     field_name: str
     expected_source: str = Field(description="extraction or preprocessing")
-    actual_source: Optional[str] = None
+    actual_source: str | None = None
     is_forbidden_field: bool = False
     is_valid: bool = True
-    severity: Optional[str] = None
-    issue: Optional[str] = None
+    severity: str | None = None
+    issue: str | None = None
 
 
 class PhaseValidation(BaseModel):
@@ -364,16 +412,17 @@ class PhaseValidation(BaseModel):
     # INCONCLUSIVE cases are excluded from compliance score calculations
 
     # Evidence
-    preprocessing_evidence: Dict[str, Any] = Field(
-        default_factory=dict, description="Relevant fields from preprocessing data"
+    preprocessing_evidence: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Relevant fields from preprocessing data",
     )
 
-    agent_intermediate_output: Dict[str, Any] = Field(
+    agent_intermediate_output: dict[str, Any] = Field(
         default_factory=dict, description="What agent extracted/calculated"
     )
 
     # Compliance details
-    applicable_rules: List[str] = Field(
+    applicable_rules: list[str] = Field(
         default_factory=list,
         description="e.g., ['Section 0.2', 'Step 15', 'Rule 33.1']",
     )
@@ -382,17 +431,17 @@ class PhaseValidation(BaseModel):
         description="Why agent is compliant/violated rules"
     )
 
-    violated_rules: List[str] = Field(default_factory=list)
-    followed_rules: List[str] = Field(default_factory=list)
+    violated_rules: list[str] = Field(default_factory=list)
+    followed_rules: list[str] = Field(default_factory=list)
 
     # Data source validation (new for reconstructed rules)
-    data_source_validations: List[DataSourceValidation] = Field(
+    data_source_validations: list[DataSourceValidation] = Field(
         default_factory=list, description="Section 0 data source compliance"
     )
 
     # Correction needed (if violation)
-    correction_needed: Optional[str] = Field(default=None)
-    correction_priority: Optional[str] = Field(default="MEDIUM")
+    correction_needed: str | None = Field(default=None)
+    correction_priority: str | None = Field(default="MEDIUM")
 
 
 class RejectionPattern(BaseModel):
@@ -402,15 +451,21 @@ class RejectionPattern(BaseModel):
         description="e.g., 'PO number mismatch', 'Missing vendor WAF'"
     )
 
-    affected_phase: str = Field(description="Which phase triggers this rejection")
+    affected_phase: str = Field(
+        description="Which phase triggers this rejection"
+    )
 
     case_count: int = Field(description="Number of cases with this rejection")
 
     percentage: float = Field(description="% of total rejections")
 
-    example_case_ids: List[str] = Field(description="Sample cases showing this pattern")
+    example_case_ids: list[str] = Field(
+        description="Sample cases showing this pattern"
+    )
 
-    rule_reference: List[str] = Field(description="Rules that govern this rejection")
+    rule_reference: list[str] = Field(
+        description="Rules that govern this rejection"
+    )
 
     # Rule compliance
     legitimate_rejections: int = Field(
@@ -438,7 +493,7 @@ class AgentCaseInvestigation(BaseModel):
     processing_summary: CaseProcessingSummary
 
     # Phase-by-phase validation
-    phase_validations: List[PhaseValidation]
+    phase_validations: list[PhaseValidation]
 
     # Overall assessment
     overall_rule_compliance: str = Field(
@@ -452,29 +507,31 @@ class AgentCaseInvestigation(BaseModel):
 
     # Rejection analysis (if rejected)
     is_rejected: bool
-    rejection_justified: Optional[bool] = Field(
+    rejection_justified: bool | None = Field(
         default=None,
         description="Was rejection correct per reconstructed_rules_book.md?",
     )
-    rejection_justification: Optional[str] = None
+    rejection_justification: str | None = None
 
     # Data quality
-    preprocessing_data_quality: str = Field(description="COMPLETE, PARTIAL, POOR")
+    preprocessing_data_quality: str = Field(
+        description="COMPLETE, PARTIAL, POOR"
+    )
     preprocessing_completeness: float = Field(ge=0.0, le=100.0)
 
     # Data source compliance (new for reconstructed rules)
     data_source_compliance: str = Field(
         default="NOT_CHECKED", description="COMPLIANT, VIOLATION, PARTIAL"
     )
-    data_source_violations: List[str] = Field(default_factory=list)
+    data_source_violations: list[str] = Field(default_factory=list)
 
     # Recommendations
-    agent_improvements: List[str] = Field(default_factory=list)
-    rule_clarifications_needed: List[str] = Field(default_factory=list)
-    data_quality_improvements: List[str] = Field(default_factory=list)
+    agent_improvements: list[str] = Field(default_factory=list)
+    rule_clarifications_needed: list[str] = Field(default_factory=list)
+    data_quality_improvements: list[str] = Field(default_factory=list)
 
     # Layer 3: Per-group validation results (v2.0.0)
-    group_validation_results: Optional[Dict[str, Any]] = Field(
+    group_validation_results: dict[str, Any] | None = Field(
         default=None, description="Per-group validation results from Layer 3"
     )
     layer3_violations: int = Field(
@@ -490,7 +547,9 @@ class AgentInvestigationSummary(BaseModel):
     """Aggregate analysis across all cases"""
 
     timestamp: str
-    rules_book_version: str = Field(default="reconstructed_rules_book.md v1.1.1")
+    rules_book_version: str = Field(
+        default="reconstructed_rules_book.md v1.1.1"
+    )
     total_cases_investigated: int
 
     # Outcome breakdown
@@ -502,7 +561,7 @@ class AgentInvestigationSummary(BaseModel):
     rejection_rate: float
 
     # Rejection analysis
-    rejection_patterns: List[RejectionPattern] = Field(
+    rejection_patterns: list[RejectionPattern] = Field(
         description="Sorted by frequency"
     )
 
@@ -525,13 +584,17 @@ class AgentInvestigationSummary(BaseModel):
     phase4_rejection_rate: float
 
     # Justified vs unjustified rejections
-    justified_rejections: int = Field(description="Agent correctly rejected per rules")
+    justified_rejections: int = Field(
+        description="Agent correctly rejected per rules"
+    )
     unjustified_rejections: int = Field(
         description="Agent rejected but should have accepted per rules"
     )
 
     # Top violations
-    top_rule_violations: List[str] = Field(description="Most frequently violated rules")
+    top_rule_violations: list[str] = Field(
+        description="Most frequently violated rules"
+    )
 
     # Data source compliance (new for reconstructed rules)
     data_source_compliant_cases: int = Field(default=0)
@@ -544,9 +607,9 @@ class AgentInvestigationSummary(BaseModel):
     )
 
     # Recommendations
-    top_agent_fixes: List[str]
-    top_rule_clarifications: List[str]
-    top_data_quality_fixes: List[str]
+    top_agent_fixes: list[str]
+    top_rule_clarifications: list[str]
+    top_data_quality_fixes: list[str]
 
     # Executive summary
     executive_summary: str
@@ -631,7 +694,7 @@ class ReconstructedRulesExtractor:
             rf"\|\s*\*\*{step_number}\*\*\s*\|",
         ]
 
-        for i, line in enumerate(self.lines):
+        for _i, line in enumerate(self.lines):
             if not capturing:
                 for pattern in patterns:
                     if re.search(pattern, line, re.IGNORECASE):
@@ -641,9 +704,14 @@ class ReconstructedRulesExtractor:
                         break
             else:
                 # Stop at next step or major section
-                if re.match(r"^#{2,4}\s*(Step\s*\d+|Phase|\d+\.)", line, re.IGNORECASE):
+                if re.match(
+                    r"^#{2,4}\s*(Step\s*\d+|Phase|\d+\.)", line, re.IGNORECASE
+                ):
                     break
-                if re.match(r"^\|\s*\*\*\d+\*\*\s*\|", line) and len(section_lines) > 5:
+                if (
+                    re.match(r"^\|\s*\*\*\d+\*\*\s*\|", line)
+                    and len(section_lines) > _MIN_SECTION_LINES
+                ):
                     break
                 section_lines.append(line)
 
@@ -763,10 +831,13 @@ class RuleDiscoveryEngine:
     """
 
     def __init__(
-        self, rules_content: str, model_name: str = None, cache_path: Path = None
+        self,
+        rules_content: str,
+        model_name: str | None = None,
+        cache_path: Path | None = None,
     ):
         self.rules_content = rules_content
-        self.model_name = model_name or GEMINI_PRO_MODEL
+        self.model_name = model_name or _gcp_config["GEMINI_PRO_MODEL"]
         self.cache_path = cache_path or (
             AGENT_PKG_DIR / "data" / "rule_discovery_cache.json"
         )
@@ -799,7 +870,9 @@ class RuleDiscoveryEngine:
                 return cached
 
         # Cache miss — discover via LLM
-        print("  Discovering rules from rules book (this may take 10-20 seconds)...")
+        print(
+            "  Discovering rules from rules book (this may take 10-20 seconds)..."
+        )
         discovered = self._call_llm_for_discovery()
 
         discovered["rules_book_hash"] = rules_hash
@@ -813,14 +886,14 @@ class RuleDiscoveryEngine:
         self.discovered_rules = discovered
         return discovered
 
-    def get_rule_group(self, group_id: str) -> Optional[dict]:
+    def get_rule_group(self, group_id: str) -> dict | None:
         """Get a specific rule group by ID."""
         for group in self.discovered_rules.get("rule_groups", []):
             if group.get("group_id") == group_id:
                 return group
         return None
 
-    def get_rule(self, group_id: str, rule_id: str) -> Optional[dict]:
+    def get_rule(self, group_id: str, rule_id: str) -> dict | None:
         """Get a specific rule from a group."""
         group = self.get_rule_group(group_id)
         if not group:
@@ -834,10 +907,10 @@ class RuleDiscoveryEngine:
         """Compute SHA-256 hash of rules book content."""
         return hashlib.sha256(self.rules_content.encode("utf-8")).hexdigest()
 
-    def _load_cache(self) -> Optional[dict]:
+    def _load_cache(self) -> dict | None:
         """Load cached rules from JSON file."""
         try:
-            with open(self.cache_path, "r", encoding="utf-8") as f:
+            with open(self.cache_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             print(f"  Warning: Failed to load rule cache: {e}")
@@ -854,7 +927,11 @@ class RuleDiscoveryEngine:
 
     def _call_llm_for_discovery(self) -> dict:
         """Call LLM to discover and group rules from rules book."""
-        _domain = _MASTER_DATA.display_name if _MASTER_DATA else "invoice processing"
+        _domain = (
+            _get_master_data().display_name
+            if _get_master_data()
+            else "invoice processing"
+        )
         prompt = f"""You are analyzing a {_domain} rules book to discover ALL validation rules.
 Your task is to extract every hardcodeable validation parameter — field lists, keywords,
 thresholds, entity names, exemption lists — and group them logically.
@@ -950,7 +1027,7 @@ class PerGroupValidator:
     """
 
     # Groups that are batched into a single LLM call (deterministic rules)
-    BATCH_GROUPS = {
+    BATCH_GROUPS: ClassVar[set[str]] = {
         "data_source_rules",
         "tolerance_thresholds",
         "entity_whitelists",
@@ -959,13 +1036,17 @@ class PerGroupValidator:
     }
 
     # Groups that get individual LLM calls (subjective judgment)
-    INDIVIDUAL_GROUPS = {
+    INDIVIDUAL_GROUPS: ClassVar[set[str]] = {
         "work_type_classification",
         "bypass_exemption_rules",
     }
 
-    def __init__(self, model_name: str = None, config: "InvestigationConfig" = None):
-        self.model_name = model_name or GEMINI_PRO_MODEL
+    def __init__(
+        self,
+        model_name: str | None = None,
+        config: "InvestigationConfig | None" = None,
+    ):
+        self.model_name = model_name or _gcp_config["GEMINI_PRO_MODEL"]
         self.config = config or INVESTIGATION_CONFIG
         self.model = GenerativeModel(
             self.model_name,
@@ -978,7 +1059,7 @@ class PerGroupValidator:
         self,
         case_id: str,
         rule_groups: list,
-        case_data: Dict[str, Any],
+        case_data: dict[str, Any],
         enable_double_check: bool = True,
     ) -> dict:
         """
@@ -996,7 +1077,9 @@ class PerGroupValidator:
             g for g in rule_groups if g.get("group_id") in self.BATCH_GROUPS
         ]
         individual_groups = [
-            g for g in rule_groups if g.get("group_id") in self.INDIVIDUAL_GROUPS
+            g
+            for g in rule_groups
+            if g.get("group_id") in self.INDIVIDUAL_GROUPS
         ]
         unknown_groups = [
             g
@@ -1026,7 +1109,10 @@ class PerGroupValidator:
         # 2) Individual calls for subjective groups
         for rule_group in individual_groups:
             result = self._validate_individual(
-                case_id, rule_group, case_data, enable_double_check=enable_double_check
+                case_id,
+                rule_group,
+                case_data,
+                enable_double_check=enable_double_check,
             )
             group_results.append(result)
             all_violations.extend(result.get("violations", []))
@@ -1064,7 +1150,7 @@ class PerGroupValidator:
         self,
         case_id: str,
         rule_group: dict,
-        case_data: Dict[str, Any],
+        case_data: dict[str, Any],
         enable_double_check: bool = True,
     ) -> dict:
         """Validate a single group — delegates to batch or individual."""
@@ -1094,7 +1180,7 @@ class PerGroupValidator:
         self,
         case_id: str,
         rule_groups: list,
-        case_data: Dict[str, Any],
+        case_data: dict[str, Any],
         enable_double_check: bool = True,
     ) -> dict:
         """
@@ -1102,7 +1188,9 @@ class PerGroupValidator:
 
         v2.0.2: Sends ALL deterministic rules in one prompt. Ultra-conservative.
         """
-        group_names = [g.get("name", g.get("group_id", "?")) for g in rule_groups]
+        group_names = [
+            g.get("name", g.get("group_id", "?")) for g in rule_groups
+        ]
         print(f"      [Batch: {', '.join(group_names)}]...", end=" ")
 
         prompt = self._build_batch_prompt(case_id, rule_groups, case_data)
@@ -1118,7 +1206,7 @@ class PerGroupValidator:
         self,
         case_id: str,
         rule_group: dict,
-        case_data: Dict[str, Any],
+        case_data: dict[str, Any],
         enable_double_check: bool = True,
     ) -> dict:
         """
@@ -1131,7 +1219,9 @@ class PerGroupValidator:
         print(f"      [{group_name}]...", end=" ")
 
         prompt = self._build_individual_prompt(case_id, rule_group, case_data)
-        return self._run_with_triple_check(prompt, group_id, enable_double_check)
+        return self._run_with_triple_check(
+            prompt, group_id, enable_double_check
+        )
 
     # ==================================================================
     # TRIPLE-CHECK MECHANISM (shared by batch and individual)
@@ -1153,7 +1243,7 @@ class PerGroupValidator:
         first_result["violations"] = [
             v
             for v in first_result.get("violations", [])
-            if v.get("confidence", 0) >= 0.95
+            if v.get("confidence", 0) >= _HIGH_CONFIDENCE_THRESHOLD
         ]
 
         if not first_result.get("violations"):
@@ -1172,7 +1262,7 @@ class PerGroupValidator:
         second_result["violations"] = [
             v
             for v in second_result.get("violations", [])
-            if v.get("confidence", 0) >= 0.95
+            if v.get("confidence", 0) >= _HIGH_CONFIDENCE_THRESHOLD
         ]
 
         if not self._compare_results(first_result, second_result):
@@ -1193,7 +1283,7 @@ class PerGroupValidator:
         third_result["violations"] = [
             v
             for v in third_result.get("violations", [])
-            if v.get("confidence", 0) >= 0.95
+            if v.get("confidence", 0) >= _HIGH_CONFIDENCE_THRESHOLD
         ]
 
         if not self._compare_results(first_result, third_result):
@@ -1218,14 +1308,16 @@ class PerGroupValidator:
     # ==================================================================
 
     def _build_batch_prompt(
-        self, case_id: str, rule_groups: list, case_data: Dict[str, Any]
+        self, case_id: str, rule_groups: list, case_data: dict[str, Any]
     ) -> str:
         """
         Build a single LLM prompt containing ALL deterministic rule groups.
 
         v2.0.2: One prompt, one call — fully dynamic, no hardcoded logic.
         """
-        extraction_data = case_data.get("agent_outputs", {}).get("extraction", {})
+        extraction_data = case_data.get("agent_outputs", {}).get(
+            "extraction", {}
+        )
         agent_outputs = case_data.get("agent_outputs", {})
 
         # Collect ALL phase outputs (batch covers multiple phases)
@@ -1243,7 +1335,9 @@ class PerGroupValidator:
 
         def truncate_json(obj, max_chars=3000):
             s = json.dumps(obj, indent=2, default=str)
-            return s[:max_chars] + "\n... (truncated)" if len(s) > max_chars else s
+            return (
+                s[:max_chars] + "\n... (truncated)" if len(s) > max_chars else s
+            )
 
         # Build combined rules section
         rules_sections = []
@@ -1259,7 +1353,11 @@ class PerGroupValidator:
             )
         combined_rules = "\n\n".join(rules_sections)
 
-        _domain = _MASTER_DATA.display_name if _MASTER_DATA else "invoice processing"
+        _domain = (
+            _get_master_data().display_name
+            if _get_master_data()
+            else "invoice processing"
+        )
         prompt = f"""You are validating an agent's {_domain} against multiple rule groups.
 
 **CRITICAL PHILOSOPHY — YOU MUST FOLLOW THIS:**
@@ -1344,14 +1442,16 @@ An empty violations list is the EXPECTED and PREFERRED outcome for most cases.
         return prompt
 
     def _build_individual_prompt(
-        self, case_id: str, rule_group: dict, case_data: Dict[str, Any]
+        self, case_id: str, rule_group: dict, case_data: dict[str, Any]
     ) -> str:
         """
         Build LLM prompt for a single subjective rule group.
 
         v2.0.2: Ultra-conservative prompt for subjective groups.
         """
-        extraction_data = case_data.get("agent_outputs", {}).get("extraction", {})
+        extraction_data = case_data.get("agent_outputs", {}).get(
+            "extraction", {}
+        )
         agent_outputs = case_data.get("agent_outputs", {})
 
         phase_map = {
@@ -1368,9 +1468,15 @@ An empty violations list is the EXPECTED and PREFERRED outcome for most cases.
 
         def truncate_json(obj, max_chars=3000):
             s = json.dumps(obj, indent=2, default=str)
-            return s[:max_chars] + "\n... (truncated)" if len(s) > max_chars else s
+            return (
+                s[:max_chars] + "\n... (truncated)" if len(s) > max_chars else s
+            )
 
-        _domain = _MASTER_DATA.display_name if _MASTER_DATA else "invoice processing"
+        _domain = (
+            _get_master_data().display_name
+            if _get_master_data()
+            else "invoice processing"
+        )
         prompt = f"""You are validating an agent's {_domain} against a specific rule group.
 
 **CRITICAL PHILOSOPHY — YOU MUST FOLLOW THIS:**
@@ -1480,10 +1586,14 @@ An empty violations list is the EXPECTED and PREFERRED outcome.
         Returns False if inconsistent (discard violations).
         """
         first_violations = {
-            v.get("rule_id") for v in first.get("violations", []) if v.get("rule_id")
+            v.get("rule_id")
+            for v in first.get("violations", [])
+            if v.get("rule_id")
         }
         second_violations = {
-            v.get("rule_id") for v in second.get("violations", []) if v.get("rule_id")
+            v.get("rule_id")
+            for v in second.get("violations", [])
+            if v.get("rule_id")
         }
 
         if not first_violations:
@@ -1494,7 +1604,7 @@ An empty violations list is the EXPECTED and PREFERRED outcome.
 
         overlap = first_violations & second_violations
         overlap_ratio = len(overlap) / len(first_violations)
-        return overlap_ratio >= 0.75
+        return overlap_ratio >= _OVERLAP_THRESHOLD
 
 
 # ============================================================================
@@ -1513,7 +1623,7 @@ class DataSourceValidator:
     """
 
     # Hardcoded defaults (used as fallback if rule discovery is unavailable)
-    _DEFAULT_INVOICE_CONTENT_FIELDS = {
+    _DEFAULT_INVOICE_CONTENT_FIELDS: ClassVar[dict[str, str]] = {
         "invoice_total_inc_gst": "Invoice total including GST",
         "invoice_total_ex_gst": "Invoice total excluding GST",
         "gst_amount": "GST/tax amount",
@@ -1524,7 +1634,7 @@ class DataSourceValidator:
         "balance": "Calculated balance (Inc GST - Ex GST - GST)",
     }
 
-    _DEFAULT_PO_WO_METADATA_FIELDS = {
+    _DEFAULT_PO_WO_METADATA_FIELDS: ClassVar[dict[str, str]] = {
         "po_number": "Purchase Order number",
         "wo_status": "Work Order status",
         "po_status": "Purchase Order status",
@@ -1537,7 +1647,7 @@ class DataSourceValidator:
         "work_after_hours_allowed": "Work after hours flag",
     }
 
-    _DEFAULT_FORBIDDEN_PREPROCESSING_FIELDS = {
+    _DEFAULT_FORBIDDEN_PREPROCESSING_FIELDS: ClassVar[dict[str, str]] = {
         "pretax_total": "Contains PO subtotal, not invoice subtotal",
         "gst_total": "Contains PO GST, not invoice GST",
         "invoice_total": "Contains PO total, not invoice total",
@@ -1545,7 +1655,7 @@ class DataSourceValidator:
         "line_items_json": "Contains PO line items, not invoice line items",
     }
 
-    def __init__(self, rule_discovery: "RuleDiscoveryEngine" = None):
+    def __init__(self, rule_discovery: "RuleDiscoveryEngine | None" = None):
         """
         Initialize with discovered rules or fall back to defaults.
 
@@ -1560,53 +1670,71 @@ class DataSourceValidator:
         )
 
         if rule_discovery:
-            group = rule_discovery.get_rule_group("data_source_rules")
-            if group:
-                # The LLM may return "rules" as a dict (keys = field categories)
-                # or as a list of rule objects. Handle both.
-                rules_data = group.get("rules", {})
-                if isinstance(rules_data, dict):
-                    # Direct dict: {"invoice_content_fields": [...], ...}
-                    fields = rules_data
-                elif isinstance(rules_data, list):
-                    # List of rule objects: merge all dicts
-                    fields = {}
-                    for rule in rules_data:
-                        if isinstance(rule, dict):
-                            for k, v in rule.items():
-                                if k not in ("rule_id", "description"):
-                                    fields[k] = v
-                else:
-                    fields = {}
+            self._load_from_discovery(rule_discovery)
 
-                # Load invoice content fields
-                icf = fields.get("invoice_content_fields", [])
-                if icf and isinstance(icf, list):
-                    self.INVOICE_CONTENT_FIELDS = {
-                        f["field"]: f.get("description", "")
-                        for f in icf
-                        if isinstance(f, dict) and "field" in f
-                    }
-                # Load PO/WO metadata fields
-                pwf = fields.get("po_wo_metadata_fields", [])
-                if pwf and isinstance(pwf, list):
-                    self.PO_WO_METADATA_FIELDS = {
-                        f["field"]: f.get("description", "")
-                        for f in pwf
-                        if isinstance(f, dict) and "field" in f
-                    }
-                # Load forbidden fields
-                fpf = fields.get("forbidden_preprocessing_fields", [])
-                if fpf and isinstance(fpf, list):
-                    self.FORBIDDEN_PREPROCESSING_FIELDS = {
-                        f["field"]: f.get("reason", f.get("description", ""))
-                        for f in fpf
-                        if isinstance(f, dict) and "field" in f
-                    }
+    def _load_from_discovery(
+        self, rule_discovery: "RuleDiscoveryEngine"
+    ) -> None:
+        """Load field lists from discovered rules, overriding defaults."""
+        group = rule_discovery.get_rule_group("data_source_rules")
+        if not group:
+            return
+
+        fields = self._normalize_rules_data(group.get("rules", {}))
+        self._load_field_list(
+            fields, "invoice_content_fields", "INVOICE_CONTENT_FIELDS"
+        )
+        self._load_field_list(
+            fields, "po_wo_metadata_fields", "PO_WO_METADATA_FIELDS"
+        )
+        self._load_field_list(
+            fields,
+            "forbidden_preprocessing_fields",
+            "FORBIDDEN_PREPROCESSING_FIELDS",
+            value_key="reason",
+        )
+
+    @staticmethod
+    def _normalize_rules_data(rules_data: Any) -> dict:
+        """Normalize LLM rules response (dict or list) into a flat dict."""
+        if isinstance(rules_data, dict):
+            return rules_data
+        if isinstance(rules_data, list):
+            merged: dict[str, Any] = {}
+            for rule in rules_data:
+                if isinstance(rule, dict):
+                    for k, v in rule.items():
+                        if k not in ("rule_id", "description"):
+                            merged[k] = v
+            return merged
+        return {}
+
+    def _load_field_list(
+        self,
+        fields: dict,
+        key: str,
+        attr: str,
+        value_key: str = "description",
+    ) -> None:
+        """Load a list of field dicts into the given instance attribute."""
+        raw = fields.get(key, [])
+        if raw and isinstance(raw, list):
+            setattr(
+                self,
+                attr,
+                {
+                    f["field"]: f.get(value_key, f.get("description", ""))
+                    for f in raw
+                    if isinstance(f, dict) and "field" in f
+                },
+            )
 
     def validate_data_source_usage(
-        self, extraction_data: dict, preprocessing_data: dict, agent_phase_output: dict
-    ) -> List[DataSourceValidation]:
+        self,
+        extraction_data: dict,
+        preprocessing_data: dict,
+        agent_phase_output: dict,
+    ) -> list[DataSourceValidation]:
         """
         Check if agent used correct data sources for all fields.
 
@@ -1615,7 +1743,10 @@ class DataSourceValidator:
         validations = []
 
         # Check if agent used forbidden preprocessing fields
-        for field_name, description in self.FORBIDDEN_PREPROCESSING_FIELDS.items():
+        for (
+            field_name,
+            description,
+        ) in self.FORBIDDEN_PREPROCESSING_FIELDS.items():
             # Look for evidence agent used this field
             if self._field_referenced_in_output(
                 field_name, agent_phase_output, "preprocessing"
@@ -1633,7 +1764,7 @@ class DataSourceValidator:
                 )
 
         # Check invoice content fields
-        for invoice_field, description in self.INVOICE_CONTENT_FIELDS.items():
+        for invoice_field, _description in self.INVOICE_CONTENT_FIELDS.items():
             if self._field_referenced_in_output(
                 invoice_field, agent_phase_output, "preprocessing"
             ):
@@ -1687,7 +1818,7 @@ class DataSourceValidator:
         self,
         extraction_data: dict,
         preprocessing_data: dict,
-        agent_calculated_balance: Optional[float],
+        agent_calculated_balance: float | None,
     ) -> DataSourceValidation:
         """
         Validate balance was calculated from extraction data, not preprocessing.
@@ -1705,7 +1836,10 @@ class DataSourceValidator:
 
         # Validate agent balance matches extraction calculation
         if agent_calculated_balance is not None:
-            matches_extraction = abs(agent_calculated_balance - correct_balance) < 0.02
+            matches_extraction = (
+                abs(agent_calculated_balance - correct_balance)
+                < _BALANCE_TOLERANCE
+            )
 
             if not matches_extraction:
                 return DataSourceValidation(
@@ -1741,7 +1875,7 @@ class AgentOutputExtractor:
     v1.3.0: New class to improve investigation accuracy.
     """
 
-    def __init__(self, agent_outputs: Dict[str, Any]):
+    def __init__(self, agent_outputs: dict[str, Any]):
         """
         Args:
             agent_outputs: Dictionary containing all agent phase outputs
@@ -1749,7 +1883,9 @@ class AgentOutputExtractor:
         """
         self.outputs = agent_outputs
 
-    def get_validation_step(self, phase: str, step: int) -> Optional[Dict[str, Any]]:
+    def get_validation_step(
+        self, phase: str, step: int
+    ) -> dict[str, Any] | None:
         """
         Get a specific validation step from a phase's output.
 
@@ -1796,7 +1932,7 @@ class AgentOutputExtractor:
         phase_output = self.outputs.get(phase, {})
         return phase_output.get("decision", "Unknown")
 
-    def get_agent_reason(self, phase: str) -> Optional[str]:
+    def get_agent_reason(self, phase: str) -> str | None:
         """Get the agent's rejection reason for a phase."""
         phase_output = self.outputs.get(phase, {})
         return phase_output.get("rejection_reason")
@@ -1805,7 +1941,7 @@ class AgentOutputExtractor:
         """Check if a specific step was executed by the agent."""
         return self.get_validation_step(phase, step) is not None
 
-    def step_passed(self, phase: str, step: int) -> Optional[bool]:
+    def step_passed(self, phase: str, step: int) -> bool | None:
         """Check if a specific step passed. Returns None if step not found."""
         validation = self.get_validation_step(phase, step)
         if validation is None:
@@ -1819,7 +1955,7 @@ class AgentOutputExtractor:
             return ""
         return validation.get("evidence", "")
 
-    def get_all_phase_validations(self, phase: str) -> List[Dict[str, Any]]:
+    def get_all_phase_validations(self, phase: str) -> list[dict[str, Any]]:
         """Get all validation steps for a phase."""
         phase_output = self.outputs.get(phase, {})
         return phase_output.get("validations", [])
@@ -1842,7 +1978,7 @@ class BypassDetector:
     """
 
     # Default bypass patterns (used as fallback)
-    _DEFAULT_BYPASS_INDICATORS = [
+    _DEFAULT_BYPASS_INDICATORS: ClassVar[list[str]] = [
         "exempt",
         "skip",
         "not applicable",
@@ -1896,7 +2032,7 @@ class BypassDetector:
 
     def detect_bypass(
         self, phase: str, step: int, agent_evidence: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Detect if agent bypassed a step and why.
 
@@ -1922,7 +2058,9 @@ class BypassDetector:
                     "bypassed": True,
                     "bypass_type": bypass_type,
                     "bypass_reason": agent_evidence,
-                    "is_valid_bypass": self._is_valid_bypass(phase, step, bypass_type),
+                    "is_valid_bypass": self._is_valid_bypass(
+                        phase, step, bypass_type
+                    ),
                 }
 
         return {
@@ -1960,7 +2098,9 @@ class BypassDetector:
 
         if cache_key not in self._exemption_cache:
             # Extract exemption rules for this step
-            self._exemption_cache[cache_key] = self._extract_exemptions(phase, step)
+            self._exemption_cache[cache_key] = self._extract_exemptions(
+                phase, step
+            )
 
         exemptions = self._exemption_cache[cache_key]
 
@@ -1974,7 +2114,7 @@ class BypassDetector:
 
         return False
 
-    def _extract_exemptions(self, phase: str, step: int) -> Dict[str, Any]:
+    def _extract_exemptions(self, phase: str, step: int) -> dict[str, Any]:
         """Extract exemption rules for a step from rules book."""
         step_rules = self.rules_extractor.extract_step(str(step))
 
@@ -1992,7 +2132,9 @@ class BypassDetector:
         ):
             exemptions["exemption_categories"].append("work_type")
         if "exempt" in step_lower and (
-            "pm" in step_lower or "cleaning" in step_lower or "trolley" in step_lower
+            "pm" in step_lower
+            or "cleaning" in step_lower
+            or "trolley" in step_lower
         ):
             exemptions["exemption_categories"].append("work_type")
         if "exempt vendor" in step_lower or (
@@ -2010,11 +2152,13 @@ class BypassDetector:
 
         return exemptions
 
-    def get_valid_exemptions_for_step(self, phase: str, step: int) -> List[str]:
+    def get_valid_exemptions_for_step(self, phase: str, step: int) -> list[str]:
         """Get list of valid exemption types for a step."""
         cache_key = f"{phase}_{step}"
         if cache_key not in self._exemption_cache:
-            self._exemption_cache[cache_key] = self._extract_exemptions(phase, step)
+            self._exemption_cache[cache_key] = self._extract_exemptions(
+                phase, step
+            )
         return self._exemption_cache[cache_key].get("exemption_categories", [])
 
 
@@ -2076,7 +2220,7 @@ class ToleranceExtractor:
                             "source": "discovery",
                         }
 
-    def get_tolerance_for_step(self, step: int) -> Dict[str, Any]:
+    def get_tolerance_for_step(self, step: int) -> dict[str, Any]:
         """
         Get tolerance configuration for a specific step.
 
@@ -2096,7 +2240,9 @@ class ToleranceExtractor:
         self._tolerance_cache[step] = tolerance_info
         return tolerance_info
 
-    def _parse_tolerance_from_rules(self, rules_text: str, step: int) -> Dict[str, Any]:
+    def _parse_tolerance_from_rules(
+        self, rules_text: str, step: int
+    ) -> dict[str, Any]:
         """Parse tolerance values from rules text."""
         result = {
             "value": None,
@@ -2148,14 +2294,14 @@ class ToleranceExtractor:
             result["boundary_type"] = "exclusive"
 
         # Default tolerance for Step 33 (WAF hours) if not found
-        if step == 33 and result["value"] is None:
+        if step == _WAF_HOURS_STEP and result["value"] is None:
             result["value"] = 0.5
             result["unit"] = "hours"
 
         return result
 
     def apply_investigator_margin(
-        self, tolerance: Dict[str, Any], base_value: float = None
+        self, tolerance: dict[str, Any], base_value: float | None = None
     ) -> float:
         """
         Apply additional investigator margin to tolerance.
@@ -2178,7 +2324,7 @@ class ToleranceExtractor:
         expected: float,
         step: int,
         apply_investigator_margin: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Check if actual value is within tolerance of expected.
 
@@ -2197,13 +2343,17 @@ class ToleranceExtractor:
         unit = tolerance_config.get("unit", "")
 
         if apply_investigator_margin:
-            tol_value = self.apply_investigator_margin(tolerance_config, tol_value)
+            tol_value = self.apply_investigator_margin(
+                tolerance_config, tol_value
+            )
 
         # Calculate difference based on unit
         if unit == "percent":
             # Percentage tolerance
             difference = abs(actual - expected)
-            threshold = expected * (tol_value / 100) if expected != 0 else tol_value
+            threshold = (
+                expected * (tol_value / 100) if expected != 0 else tol_value
+            )
             within_tolerance = difference <= threshold
         else:
             # Absolute tolerance
@@ -2328,11 +2478,11 @@ is HIGHER than the cost of FALSE NEGATIVES (missing a minor violation). Therefor
     def __init__(
         self,
         rules_extractor: ReconstructedRulesExtractor,
-        model_name: str = None,
-        config: InvestigationConfig = None,
+        model_name: str | None = None,
+        config: InvestigationConfig | None = None,
     ):
         self.rules_extractor = rules_extractor
-        self.model_name = model_name or GEMINI_PRO_MODEL
+        self.model_name = model_name or _gcp_config["GEMINI_PRO_MODEL"]
         self.config = config or INVESTIGATION_CONFIG
         self.model = GenerativeModel(
             self.model_name,
@@ -2347,7 +2497,7 @@ is HIGHER than the cost of FALSE NEGATIVES (missing a minor violation). Therefor
 
     def _call_llm_with_retry(
         self, prompt: str, context: str = "LLM validation"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Call LLM with exponential backoff retry for infrastructure failures.
 
@@ -2406,15 +2556,17 @@ is HIGHER than the cost of FALSE NEGATIVES (missing a minor violation). Therefor
             "attempts": max_retries
             if self.config.is_infrastructure_error(last_error)
             else attempt + 1,
-            "is_infrastructure_error": self.config.is_infrastructure_error(last_error),
+            "is_infrastructure_error": self.config.is_infrastructure_error(
+                last_error
+            ),
         }
 
     def validate_work_type_classification(
         self,
-        invoice_line_items: List[dict],
+        invoice_line_items: list[dict],
         agent_work_type: str,
-        agent_confidence: float = None,
-        classification_method: str = None,
+        agent_confidence: float | None = None,
+        classification_method: str | None = None,
     ) -> dict:
         """
         Validate work type classification per Section 4.2.
@@ -2518,7 +2670,7 @@ is HIGHER than the cost of FALSE NEGATIVES (missing a minor violation). Therefor
         has_waf: bool,
         work_type: str,
         vendor_name: str,
-        line_items: List[dict],
+        line_items: list[dict],
         agent_decision: str,
     ) -> dict:
         """
@@ -2527,7 +2679,10 @@ is HIGHER than the cost of FALSE NEGATIVES (missing a minor violation). Therefor
         waf_rules = self.rules_extractor.get_waf_rules()
 
         line_items_desc = "\n".join(
-            [f"  - {item.get('description', 'N/A')}" for item in line_items[:10]]
+            [
+                f"  - {item.get('description', 'N/A')}"
+                for item in line_items[:10]
+            ]
         )
 
         prompt = f"""Validate WAF attachment check per reconstructed_rules_book.md Step 4 and Rule 4.1.
@@ -2590,7 +2745,10 @@ abbreviations). If the entity name could PLAUSIBLY be a valid customer entity, A
             }
 
     def validate_duplicate_detection(
-        self, invoice_number: str, vendor_number: str, external_validation_output: dict
+        self,
+        invoice_number: str,
+        vendor_number: str,
+        external_validation_output: dict,
     ) -> dict:
         """
         Validate Step 15: Duplicate Invoice Detection per Section 5.5.
@@ -2643,7 +2801,9 @@ abbreviations). If the entity name could PLAUSIBLY be a valid customer entity, A
             json_str = clean_json_response(response.text)
             return json.loads(json_str)
         except Exception as e:
-            print(f"    LLM duplicate detection validation failed: {str(e)[:100]}")
+            print(
+                f"    LLM duplicate detection validation failed: {str(e)[:100]}"
+            )
             return {
                 "valid": True,
                 "duplicate_check_performed": True,
@@ -2757,7 +2917,7 @@ You are ONLY checking if the ABN validation logic was correct, NOT the final Pha
         extracted_vendor: str,
         reference_vendor: str,
         agent_decision: str,
-        llm_similarity_used: bool = None,
+        llm_similarity_used: bool | None = None,
     ) -> dict:
         """
         Validate vendor name verification per Step 22.1.
@@ -2907,10 +3067,10 @@ In the Australian business environment, it is EXTREMELY common for:
         waf_total_hours: float,
         agent_decision: str,
         agent_reason: str,
-        agent_step_passed: bool = None,
-        agent_step_evidence: str = None,
-        bypass_info: Dict[str, Any] = None,
-        tolerance_info: Dict[str, Any] = None,
+        agent_step_passed: bool | None = None,
+        agent_step_evidence: str | None = None,
+        bypass_info: dict[str, Any] | None = None,
+        tolerance_info: dict[str, Any] | None = None,
     ) -> dict:
         """
         Validate WAF hours check per Step 33 and Rule 33.1.
@@ -2931,7 +3091,9 @@ In the Australian business environment, it is EXTREMELY common for:
             base_tol = tolerance_info.get("value", 0.5)
             margin_tol = base_tol * 1.15
             tolerance_str = f"{base_tol} {tolerance_info.get('unit', 'hours')}"
-            investigator_tolerance_str = f"{margin_tol:.3f} hours (with 15% margin)"
+            investigator_tolerance_str = (
+                f"{margin_tol:.3f} hours (with 15% margin)"
+            )
 
         prompt = f"""Validate WAF hours check per reconstructed_rules_book.md Step 33 and Rule 33.1.
 
@@ -3032,7 +3194,7 @@ Step 3: Compare Agent Decision to Expected
 
     def validate_invoice_type(
         self,
-        line_items: List[dict],
+        line_items: list[dict],
         has_subcontractor: bool,
         preprocessing_type: str,
         agent_type: str,
@@ -3209,7 +3371,7 @@ class RootCauseAnalyzerReconstructed:
     Identifies specific failure points with categories from reconstructed_rules_book.md.
     """
 
-    ROOT_CAUSE_CATEGORIES = {
+    ROOT_CAUSE_CATEGORIES: ClassVar[dict[str, Any]] = {
         "WRONG_DATA_SOURCE_EXTRACTION": {
             "description": "Agent used wrong data source for invoice content",
             "typical_violation": "Used incorrect field instead of extraction data",
@@ -3284,60 +3446,95 @@ class RootCauseAnalyzerReconstructed:
         },
     }
 
+    # Ordered list of (rule_keywords, explanation_subchecks) for classify_violation.
+    # Each entry: (list_of_rule_substrings, list_of_(explanation_keywords, result) pairs, default_result_or_None)
+    _VIOLATION_CLASSIFIERS: ClassVar[
+        list[tuple[list[str], list[tuple[list[str], str]], str | None]]
+    ] = [
+        # Data source violations
+        (
+            ["section 0"],
+            [
+                (["forbidden"], "FORBIDDEN_FIELD_USAGE"),
+            ],
+            "WRONG_DATA_SOURCE_EXTRACTION",
+        ),
+        # Work type issues
+        (
+            ["section 4.2", "work type"],
+            [
+                (["context"], "WORK_TYPE_CONTEXT_ERROR"),
+                (["confidence", "llm"], "WORK_TYPE_LLM_FAILURE"),
+            ],
+            None,
+        ),
+        # WAF exemption
+        (
+            ["rule 33.1"],
+            [
+                (["exempt", "skip"], "WAF_EXEMPTION_NOT_APPLIED"),
+            ],
+            None,
+        ),
+        # ABN issues
+        (
+            ["section 3.8", "step 22"],
+            [
+                (["checksum"], "ABN_CHECKSUM_NOT_VALIDATED"),
+                (
+                    ["re-extraction", "reextraction"],
+                    "ABN_REEXTRACTION_NOT_ATTEMPTED",
+                ),
+            ],
+            None,
+        ),
+        # Vendor name issues
+        (["step 22.1"], [], "VENDOR_NAME_LLM_NOT_USED"),
+        # Duplicate detection
+        (["step 15", "section 5.5"], [], "DUPLICATE_DETECTION_SKIPPED"),
+        # Invoice type issues
+        (["section 9.3"], [], "INVOICE_TYPE_OVERRIDE_MISSING"),
+        # Calculation errors
+        (["step 32", "step 35", "step 36"], [], "CALCULATION_ERROR"),
+    ]
+
+    @staticmethod
+    def _match_violation_classifiers(
+        violated_rules: list[str],
+        explanation: str,
+        classifiers: list[
+            tuple[list[str], list[tuple[list[str], str]], str | None]
+        ],
+    ) -> str | None:
+        """Check violated rules against classifier table and return root cause or None."""
+        for rule_keywords, explanation_checks, default_result in classifiers:
+            if not any(kw in r for kw in rule_keywords for r in violated_rules):
+                continue
+            for expl_keywords, result in explanation_checks:
+                if any(kw in explanation for kw in expl_keywords):
+                    return result
+            if default_result is not None:
+                return default_result
+        return None
+
     def classify_violation(
         self,
         phase_validation: PhaseValidation,
-        extraction_data: dict = None,
-        preprocessing_data: dict = None,
+        extraction_data: dict | None = None,
+        preprocessing_data: dict | None = None,
     ) -> str:
         """Determine specific root cause of violation."""
         explanation = phase_validation.compliance_explanation.lower()
         violated_rules = [r.lower() for r in phase_validation.violated_rules]
 
-        # Check for data source violations
-        if any("section 0" in r for r in violated_rules):
-            if "forbidden" in explanation:
-                return "FORBIDDEN_FIELD_USAGE"
-            return "WRONG_DATA_SOURCE_EXTRACTION"
+        result = self._match_violation_classifiers(
+            violated_rules,
+            explanation,
+            self._VIOLATION_CLASSIFIERS,
+        )
+        if result is not None:
+            return result
 
-        # Check for work type issues
-        if any("section 4.2" in r or "work type" in r for r in violated_rules):
-            if "context" in explanation:
-                return "WORK_TYPE_CONTEXT_ERROR"
-            if "confidence" in explanation or "llm" in explanation:
-                return "WORK_TYPE_LLM_FAILURE"
-
-        # Check for WAF exemption
-        if any("rule 33.1" in r for r in violated_rules):
-            if "exempt" in explanation or "skip" in explanation:
-                return "WAF_EXEMPTION_NOT_APPLIED"
-
-        # Check for ABN issues
-        if any("section 3.8" in r or "step 22" in r for r in violated_rules):
-            if "checksum" in explanation:
-                return "ABN_CHECKSUM_NOT_VALIDATED"
-            if "re-extraction" in explanation or "reextraction" in explanation:
-                return "ABN_REEXTRACTION_NOT_ATTEMPTED"
-
-        # Check for vendor name issues
-        if any("step 22.1" in r for r in violated_rules):
-            return "VENDOR_NAME_LLM_NOT_USED"
-
-        # Check for duplicate detection
-        if any("step 15" in r or "section 5.5" in r for r in violated_rules):
-            return "DUPLICATE_DETECTION_SKIPPED"
-
-        # Check for invoice type issues
-        if any("section 9.3" in r for r in violated_rules):
-            return "INVOICE_TYPE_OVERRIDE_MISSING"
-
-        # Check for calculation errors
-        if any(
-            "step 32" in r or "step 35" in r or "step 36" in r for r in violated_rules
-        ):
-            return "CALCULATION_ERROR"
-
-        # Compliant case
         if phase_validation.rule_compliance == "COMPLIANT":
             return "CORRECT_REJECTION"
 
@@ -3367,7 +3564,9 @@ def clean_json_response(response_text: str) -> str:
 
     # Remove markdown code blocks if present
     if "```" in text:
-        code_block_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        code_block_match = re.search(
+            r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL
+        )
         if code_block_match:
             text = code_block_match.group(1).strip()
 
@@ -3384,7 +3583,11 @@ def clean_json_response(response_text: str) -> str:
 
 def truncate(data: Any, limit: int) -> str:
     """Truncate data to character limit"""
-    s = json.dumps(data, indent=2) if isinstance(data, (dict, list)) else str(data)
+    s = (
+        json.dumps(data, indent=2)
+        if isinstance(data, (dict, list))
+        else str(data)
+    )
     return s[:limit] if len(s) > limit else s
 
 
@@ -3393,7 +3596,7 @@ def truncate(data: Any, limit: int) -> str:
 # ============================================================================
 
 
-def discover_agent_cases(agent_output_dir: Path) -> List[str]:
+def discover_agent_cases(agent_output_dir: Path) -> list[str]:
     """Scan agent output directory for all processed cases."""
     case_ids = []
 
@@ -3409,7 +3612,7 @@ def discover_agent_cases(agent_output_dir: Path) -> List[str]:
     return sorted(case_ids)
 
 
-def load_json_file(file_path: Path) -> Optional[dict]:
+def load_json_file(file_path: Path) -> dict | None:
     """Load JSON file safely"""
     try:
         if not file_path.exists():
@@ -3420,21 +3623,25 @@ def load_json_file(file_path: Path) -> Optional[dict]:
         return None
 
 
-def load_agent_case_data(case_id: str) -> Dict[str, Any]:
+def load_agent_case_data(case_id: str) -> dict[str, Any]:
     """Load all agent processing outputs for a case.
 
     Note: The general agent does NOT consume any preprocessing/metadata files.
     It only processes PDF files. This function loads only the agent's own outputs
     (intermediate and final) for validation against the rules book.
     """
-    data = {"case_id": case_id, "postprocessing_data": None, "agent_outputs": {}}
+    data = {
+        "case_id": case_id,
+        "postprocessing_data": None,
+        "agent_outputs": {},
+    }
 
     # Load agent outputs
     output_folder = AGENT_OUTPUT_DIR / case_id
     if output_folder.exists():
         # Read agent file map from master data if available, else use defaults
-        if _MASTER_DATA and _MASTER_DATA.get_agent_file_map():
-            _md_file_map = _MASTER_DATA.get_agent_file_map()
+        if _get_master_data() and _get_master_data().get_agent_file_map():
+            _md_file_map = _get_master_data().get_agent_file_map()
             agent_files = {}
             for key, filename in _md_file_map.items():
                 # Map master data keys to investigation-expected keys
@@ -3473,7 +3680,7 @@ def load_agent_case_data(case_id: str) -> Dict[str, Any]:
 # ============================================================================
 
 
-def calculate_extraction_completeness(case_data: Dict[str, Any]) -> float:
+def calculate_extraction_completeness(case_data: dict[str, Any]) -> float:
     """Calculate extraction data completeness percentage.
 
     Since the general agent only uses PDF extraction (no preprocessing),
@@ -3486,8 +3693,11 @@ def calculate_extraction_completeness(case_data: Dict[str, Any]) -> float:
         return 0.0
 
     # Read expected fields from master data if available
-    if _MASTER_DATA and _MASTER_DATA.get_expected_extraction_fields():
-        expected_fields = _MASTER_DATA.get_expected_extraction_fields()
+    if (
+        _get_master_data()
+        and _get_master_data().get_expected_extraction_fields()
+    ):
+        expected_fields = _get_master_data().get_expected_extraction_fields()
     else:
         expected_fields = [
             "vendor_name",
@@ -3503,12 +3713,11 @@ def calculate_extraction_completeness(case_data: Dict[str, Any]) -> float:
     return (present_count / len(expected_fields)) * 100
 
 
-def extract_processing_summary(case_data: Dict[str, Any]) -> CaseProcessingSummary:
-    """Extract high-level summary from agent outputs."""
-    agent_outputs = case_data["agent_outputs"]
-    postprocessing_data = case_data.get("postprocessing_data", {})
-
-    # Extract final decision
+def _extract_final_decision(
+    agent_outputs: dict[str, Any],
+    postprocessing_data: dict | None,
+) -> tuple[dict, str, str]:
+    """Extract final decision, status, and decision class from agent outputs."""
     final_decision = agent_outputs.get("final_decision", {})
     if not final_decision:
         invoice_processing = (
@@ -3528,16 +3737,57 @@ def extract_processing_summary(case_data: Dict[str, Any]) -> CaseProcessingSumma
     else:
         final_status = final_decision.get("invoice_status", "UNKNOWN")
         final_decision_class = final_decision.get("decision_class", "UNKNOWN")
+    return final_decision, final_status, final_decision_class
 
-    # Extract classification
+
+def _extract_invoice_type(
+    agent_outputs: dict[str, Any],
+    postprocessing_data: dict | None,
+) -> str:
+    """Extract invoice type from classification or postprocessing."""
     classification = agent_outputs.get("classification", {})
     invoice_type = classification.get("invoice_type")
-
     if not invoice_type and postprocessing_data:
         invoice_processing = postprocessing_data.get("Invoice Processing", {})
         invoice_type = invoice_processing.get("Invoice Type", "Unknown")
     elif not invoice_type:
         invoice_type = "Unknown"
+    return invoice_type
+
+
+def _find_first_rejection(
+    final_decision: dict,
+    phase_results: list[tuple[str, str, str | None]],
+) -> tuple[str | None, str | None]:
+    """Find the first rejection phase and reason."""
+    first_phase = (
+        final_decision.get("rejection_phase") if final_decision else None
+    )
+    first_reason = (
+        final_decision.get("rejection_reason") if final_decision else None
+    )
+    if not first_phase:
+        reject_values = ["Reject", "Set Aside", "REJECT", "SET_ASIDE"]
+        for phase_name, result, reason in phase_results:
+            if result in reject_values:
+                return phase_name, reason
+    return first_phase, first_reason
+
+
+def extract_processing_summary(
+    case_data: dict[str, Any],
+) -> CaseProcessingSummary:
+    """Extract high-level summary from agent outputs."""
+    agent_outputs = case_data["agent_outputs"]
+    postprocessing_data = case_data.get("postprocessing_data", {})
+
+    final_decision, final_status, final_decision_class = (
+        _extract_final_decision(
+            agent_outputs,
+            postprocessing_data,
+        )
+    )
+    invoice_type = _extract_invoice_type(agent_outputs, postprocessing_data)
 
     # Extract extraction results
     extraction = agent_outputs.get("extraction", {})
@@ -3545,9 +3795,9 @@ def extract_processing_summary(case_data: Dict[str, Any]) -> CaseProcessingSumma
         extraction.get("invoice", {}) if "invoice" in extraction else extraction
     )
     vendor_name = invoice_data.get("vendor_name")
-    invoice_total = invoice_data.get("invoice_total_inc_tax") or invoice_data.get(
-        "invoice_total"
-    )
+    invoice_total = invoice_data.get(
+        "invoice_total_inc_tax"
+    ) or invoice_data.get("invoice_total")
     invoice_date = invoice_data.get("invoice_date")
 
     # Extract phase results
@@ -3577,29 +3827,15 @@ def extract_processing_summary(case_data: Dict[str, Any]) -> CaseProcessingSumma
         exceptions_applied = []
 
     # Find first rejection point
-    # First try reading the rejection_phase written by the acting agent
-    first_rejection_phase = (
-        final_decision.get("rejection_phase") if final_decision else None
+    first_rejection_phase, first_rejection_reason = _find_first_rejection(
+        final_decision,
+        [
+            ("Phase 1", phase1_result, phase1_reason),
+            ("Phase 2", phase2_result, phase2_reason),
+            ("Phase 3", phase3_result, phase3_reason),
+            ("Phase 4", phase4_result, phase4_reason),
+        ],
     )
-    first_rejection_reason = (
-        final_decision.get("rejection_reason") if final_decision else None
-    )
-
-    # Fallback: infer from individual phase decisions (case-insensitive)
-    if not first_rejection_phase:
-        reject_values = ["Reject", "Set Aside", "REJECT", "SET_ASIDE"]
-        if phase1_result in reject_values:
-            first_rejection_phase = "Phase 1"
-            first_rejection_reason = phase1_reason
-        elif phase2_result in reject_values:
-            first_rejection_phase = "Phase 2"
-            first_rejection_reason = phase2_reason
-        elif phase3_result in reject_values:
-            first_rejection_phase = "Phase 3"
-            first_rejection_reason = phase3_reason
-        elif phase4_result in reject_values:
-            first_rejection_phase = "Phase 4"
-            first_rejection_reason = phase4_reason
 
     # Check extraction data quality
     extraction_issues = []
@@ -3641,7 +3877,9 @@ def extract_processing_summary(case_data: Dict[str, Any]) -> CaseProcessingSumma
 # ============================================================================
 
 
-def get_phase_output(case_data: Dict[str, Any], phase_name: str) -> Dict[str, Any]:
+def get_phase_output(
+    case_data: dict[str, Any], phase_name: str
+) -> dict[str, Any]:
     """Extract the relevant agent output for a specific phase."""
     agent_outputs = case_data["agent_outputs"]
 
@@ -3677,7 +3915,7 @@ def get_phase_output(case_data: Dict[str, Any], phase_name: str) -> Dict[str, An
 
 
 def validate_phase_against_rules(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     phase_name: str,
     llm_validator: LLMRulesValidatorReconstructed,
     data_source_validator: DataSourceValidator,
@@ -3711,7 +3949,9 @@ def validate_phase_against_rules(
         )
 
     elif phase_name == "Phase 3":
-        return _validate_phase3(case_data, llm_validator, extraction_data, phase_output)
+        return _validate_phase3(
+            case_data, llm_validator, extraction_data, phase_output
+        )
 
     elif phase_name == "Phase 4":
         return _validate_phase4(
@@ -3727,12 +3967,16 @@ def validate_phase_against_rules(
     else:
         # Generic validation for Phase 2
         return _validate_phase_generic(
-            case_data, phase_name, llm_validator, extraction_data, agent_phase_output
+            case_data,
+            phase_name,
+            llm_validator,
+            extraction_data,
+            agent_phase_output,
         )
 
 
 def _validate_phase1(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     llm_validator: LLMRulesValidatorReconstructed,
     data_source_validator: DataSourceValidator,
     classification: dict,
@@ -3782,7 +4026,8 @@ def _validate_phase1(
         waf_valid = waf_result.get("valid", True)
         # v1.4.0: Get confidence from results
         combined_confidence = min(
-            work_type_result.get("confidence", 0.5), waf_result.get("confidence", 0.5)
+            work_type_result.get("confidence", 0.5),
+            waf_result.get("confidence", 0.5),
         )
 
         if not work_type_valid or not waf_valid:
@@ -3809,7 +4054,9 @@ def _validate_phase1(
                 else waf_result.get("reasoning")
             )
             severity = (
-                work_type_result.get("severity") or waf_result.get("severity") or "HIGH"
+                work_type_result.get("severity")
+                or waf_result.get("severity")
+                or "HIGH"
             )
 
             # v1.4.0: Downgrade severity if not a confirmed violation
@@ -3827,10 +4074,14 @@ def _validate_phase1(
             case_id=case_id,
             agent_action=phase_output.get("decision") or "Continue",
             agent_reason=phase_output.get("rejection_reason") or "Not provided",
-            expected_action_per_rules=waf_result.get("expected_action", "Continue"),
+            expected_action_per_rules=waf_result.get(
+                "expected_action", "Continue"
+            ),
             rule_compliance=rule_compliance,
             preprocessing_evidence={
-                "work_type_from_line_items": work_type_result.get("expected_work_type"),
+                "work_type_from_line_items": work_type_result.get(
+                    "expected_work_type"
+                ),
                 "waf_check_should_skip": work_type_result.get(
                     "waf_check_should_skip", False
                 ),
@@ -3843,21 +4094,30 @@ def _validate_phase1(
                     "context_understanding_correct", True
                 ),
             },
-            applicable_rules=["Section 4.2", "Rule 4.1", "Rule 33.1", "Section 0"],
+            applicable_rules=[
+                "Section 4.2",
+                "Rule 4.1",
+                "Rule 33.1",
+                "Section 0",
+            ],
             compliance_explanation=compliance_explanation,
             violated_rules=violated_rules,
-            followed_rules=[] if violated_rules else ["Section 4.2", "Rule 4.1"],
+            followed_rules=[]
+            if violated_rules
+            else ["Section 4.2", "Rule 4.1"],
             correction_needed=correction_needed,
             correction_priority=severity if severity else "LOW",
         )
 
     except Exception as e:
         print(f"    Phase 1 validation failed: {str(e)[:100]}")
-        return _fallback_phase_validation("Phase 1", case_id, phase_output, str(e))
+        return _fallback_phase_validation(
+            "Phase 1", case_id, phase_output, str(e)
+        )
 
 
 def _validate_phase2_5(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     llm_validator: LLMRulesValidatorReconstructed,
     extraction_data: dict,
     preprocessing_data: dict,
@@ -3890,7 +4150,9 @@ def _validate_phase2_5(
                 if rule_compliance == "VIOLATION"
                 else []
             )
-            compliance_explanation = result.get("reasoning", "") + confidence_suffix
+            compliance_explanation = (
+                result.get("reasoning", "") + confidence_suffix
+            )
         else:
             rule_compliance = "COMPLIANT"
             violated_rules = []
@@ -3903,7 +4165,9 @@ def _validate_phase2_5(
             agent_reason=phase_output.get("reason")
             or phase_output.get("rejection_reason")
             or "Not provided",
-            expected_action_per_rules=result.get("expected_decision", "Continue"),
+            expected_action_per_rules=result.get(
+                "expected_decision", "Continue"
+            ),
             rule_compliance=rule_compliance,
             preprocessing_evidence={
                 "invoice_number": invoice_number,
@@ -3919,7 +4183,9 @@ def _validate_phase2_5(
             compliance_explanation=compliance_explanation,  # v1.4.0: Uses confidence-gated explanation
             violated_rules=violated_rules,
             followed_rules=["Step 15"] if not violated_rules else [],
-            correction_needed=result.get("reasoning") if violated_rules else None,
+            correction_needed=result.get("reasoning")
+            if violated_rules
+            else None,
             correction_priority=result.get("severity")
             if (violated_rules and rule_compliance == "VIOLATION")
             else "LOW",
@@ -3927,11 +4193,13 @@ def _validate_phase2_5(
 
     except Exception as e:
         print(f"    Phase 2.5 validation failed: {str(e)[:100]}")
-        return _fallback_phase_validation("Phase 2.5", case_id, phase_output, str(e))
+        return _fallback_phase_validation(
+            "Phase 2.5", case_id, phase_output, str(e)
+        )
 
 
 def _validate_phase3(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     llm_validator: LLMRulesValidatorReconstructed,
     extraction_data: dict,
     phase_output: dict,
@@ -3996,13 +4264,16 @@ def _validate_phase3(
         if abn_expected in ["REJECT", "SET_ASIDE"]:
             expected_action = abn_expected
         elif vendor_expected == "SET_ASIDE":
-            expected_action = "SET_ASIDE"  # Fraud indicator from vendor name mismatch
+            expected_action = (
+                "SET_ASIDE"  # Fraud indicator from vendor name mismatch
+            )
         else:
             expected_action = "Continue"
 
         # v1.4.0: Get confidence from results
         combined_confidence = min(
-            abn_result.get("confidence", 0.5), vendor_result.get("confidence", 0.5)
+            abn_result.get("confidence", 0.5),
+            vendor_result.get("confidence", 0.5),
         )
 
         if not abn_valid or not vendor_valid:
@@ -4014,13 +4285,19 @@ def _validate_phase3(
 
             violated_rules = []
             if not abn_valid and rule_compliance == "VIOLATION":
-                violated_rules.extend(abn_result.get("violated_rules", ["Step 3.2"]))
+                violated_rules.extend(
+                    abn_result.get("violated_rules", ["Step 3.2"])
+                )
             if not vendor_valid and rule_compliance == "VIOLATION":
-                violated_rules.extend(vendor_result.get("violated_rules", ["Step 1.3"]))
+                violated_rules.extend(
+                    vendor_result.get("violated_rules", ["Step 1.3"])
+                )
 
             compliance_explanation = f"ABN: {abn_result.get('reasoning', '')}. Vendor Name: {vendor_result.get('reasoning', '')}{confidence_suffix}"
             severity = (
-                abn_result.get("severity") or vendor_result.get("severity") or "HIGH"
+                abn_result.get("severity")
+                or vendor_result.get("severity")
+                or "HIGH"
             )
 
             # v1.4.0: Downgrade severity if not a confirmed violation
@@ -4051,17 +4328,23 @@ def _validate_phase3(
                 "extracted_abn": extracted_abn,
                 "extracted_vendor": extracted_vendor,
                 "currency": currency,
-                "checksum_valid": abn_metadata.get("valid") if abn_metadata else None,
+                "checksum_valid": abn_metadata.get("valid")
+                if abn_metadata
+                else None,
                 "vendor_name_present": bool(extracted_vendor),
             },
             agent_intermediate_output={
                 "extracted_abn": extracted_abn,
                 "extracted_vendor": extracted_vendor,
-                "checksum_validated": abn_result.get("checksum_validated", False),
+                "checksum_validated": abn_result.get(
+                    "checksum_validated", False
+                ),
                 "reextraction_attempted": abn_result.get(
                     "reextraction_attempted", False
                 ),
-                "fraud_indicator_detected": vendor_result.get("fraud_indicator", False),
+                "fraud_indicator_detected": vendor_result.get(
+                    "fraud_indicator", False
+                ),
             },
             applicable_rules=["Step 3.2", "Step 3.3", "Step 1.3"],
             compliance_explanation=compliance_explanation,
@@ -4069,17 +4352,128 @@ def _validate_phase3(
             followed_rules=["Step 3.2", "Step 3.3", "Step 1.3"]
             if not violated_rules
             else [],
-            correction_needed=compliance_explanation if violated_rules else None,
+            correction_needed=compliance_explanation
+            if violated_rules
+            else None,
             correction_priority=severity if severity else "LOW",
         )
 
     except Exception as e:
         print(f"    Phase 3 validation failed: {str(e)[:100]}")
-        return _fallback_phase_validation("Phase 3", case_id, phase_output, str(e))
+        return _fallback_phase_validation(
+            "Phase 3", case_id, phase_output, str(e)
+        )
+
+
+def _gather_phase4_inputs(
+    case_data: dict[str, Any],
+    extraction_data: dict,
+    bypass_detector: BypassDetector | None,
+    tolerance_extractor: ToleranceExtractor | None,
+) -> dict[str, Any]:
+    """Gather all inputs needed for Phase 4 validation."""
+    invoice = extraction_data.get("invoice", {})
+    line_items = invoice.get("line_items", [])
+    agent_extractor = AgentOutputExtractor(case_data["agent_outputs"])
+
+    phase1_output = case_data["agent_outputs"].get("phase1", {})
+    work_type = phase1_output.get("work_type", "Repairs")
+
+    labour_keywords = ["labour", "labor", "technician", "hours"]
+    invoice_labour_hours = sum(
+        float(item.get("quantity", 0) or 0)
+        for item in line_items
+        if any(
+            kw in item.get("description", "").lower() for kw in labour_keywords
+        )
+    )
+
+    waf_total_hours = 0
+    waf = extraction_data.get("work_authorization")
+    if waf:
+        waf_total_hours = waf.get("authorized_hours", 0) or 0
+
+    agent_step33 = agent_extractor.get_validation_step("phase4", 33)
+    agent_step_passed = None
+    agent_step_evidence = ""
+    if agent_step33:
+        agent_step_passed = agent_step33.get("passed")
+        agent_step_evidence = agent_step33.get("evidence", "")
+
+    bypass_info = None
+    if bypass_detector and agent_step_evidence:
+        bypass_info = bypass_detector.detect_bypass(
+            "Phase 4", 33, agent_step_evidence
+        )
+
+    tolerance_info = None
+    if tolerance_extractor:
+        tolerance_info = tolerance_extractor.get_tolerance_for_step(33)
+
+    return {
+        "work_type": work_type,
+        "invoice_labour_hours": invoice_labour_hours,
+        "waf_total_hours": waf_total_hours,
+        "agent_step33": agent_step33,
+        "agent_step_passed": agent_step_passed,
+        "agent_step_evidence": agent_step_evidence,
+        "bypass_info": bypass_info,
+        "tolerance_info": tolerance_info,
+    }
+
+
+def _build_phase4_compliance(
+    waf_result: dict,
+    ds_violations: list,
+) -> tuple[str, list[str], str, str | None]:
+    """Determine compliance status for Phase 4 from WAF and data-source results.
+
+    Returns (rule_compliance, violated_rules, compliance_explanation, severity).
+    """
+    has_ds_violations = len(ds_violations) > 0
+    waf_valid = waf_result.get("valid", True)
+
+    if waf_valid and not has_ds_violations:
+        exempt_label = (
+            "skipped (exempt)"
+            if waf_result.get("work_type_exempt")
+            else "passed"
+        )
+        return "COMPLIANT", [], f"WAF check {exempt_label}", None
+
+    waf_confidence = waf_result.get("confidence", 0.5)
+    rule_compliance, confidence_suffix = _apply_confidence_gating(
+        is_violation=True,
+        confidence=waf_confidence,
+    )
+
+    violated_rules: list[str] = []
+    if not waf_valid and rule_compliance == "VIOLATION":
+        violated_rules.extend(
+            waf_result.get("violated_rules", ["Step 33", "Rule 33.1"])
+        )
+    if has_ds_violations and rule_compliance == "VIOLATION":
+        violated_rules.extend(["Section 0"])
+
+    explanation_parts: list[str] = []
+    if not waf_valid:
+        explanation_parts.append(f"WAF: {waf_result.get('reasoning', '')}")
+    if has_ds_violations:
+        ds_issues = [v.issue for v in ds_violations if v.issue]
+        explanation_parts.append(f"Data Sources: {'; '.join(ds_issues)}")
+
+    compliance_explanation = " | ".join(explanation_parts) + confidence_suffix
+    severity = (
+        waf_result.get("severity") or "HIGH" if has_ds_violations else None
+    )
+    if rule_compliance != "VIOLATION":
+        severity = "LOW"
+
+    return rule_compliance, violated_rules, compliance_explanation, severity
 
 
 def _validate_phase4(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     llm_validator: LLMRulesValidatorReconstructed,
     data_source_validator: DataSourceValidator,
     extraction_data: dict,
@@ -4094,131 +4488,64 @@ def _validate_phase4(
     Uses AgentOutputExtractor to validate against agent's actual computed values.
     """
     case_id = case_data["case_id"]
-    invoice = extraction_data.get("invoice", {})
-    line_items = invoice.get("line_items", [])
-
-    # v1.3.0: Create agent output extractor for checking agent's actual values
-    agent_extractor = AgentOutputExtractor(case_data["agent_outputs"])
-
-    # Get work type from Phase 1
-    phase1_output = case_data["agent_outputs"].get("phase1", {})
-    work_type = phase1_output.get("work_type", "Repairs")
-
-    # Calculate labour hours
-    labour_keywords = ["labour", "labor", "technician", "hours"]
-    invoice_labour_hours = sum(
-        float(item.get("quantity", 0) or 0)
-        for item in line_items
-        if any(kw in item.get("description", "").lower() for kw in labour_keywords)
+    inputs = _gather_phase4_inputs(
+        case_data,
+        extraction_data,
+        bypass_detector,
+        tolerance_extractor,
     )
 
-    # Get WAF hours
-    waf_total_hours = 0
-    waf = extraction_data.get("work_authorization")
-    if waf:
-        waf_total_hours = waf.get("authorized_hours", 0) or 0
-
-    # v1.3.0: Get agent's actual Step 33 output
-    agent_step33 = agent_extractor.get_validation_step("phase4", 33)
-    agent_step_passed = None
-    agent_step_evidence = ""
-
-    if agent_step33:
-        agent_step_passed = agent_step33.get("passed")
-        agent_step_evidence = agent_step33.get("evidence", "")
-
-    # v1.3.0: Check for bypass using BypassDetector
-    bypass_info = None
-    if bypass_detector and agent_step_evidence:
-        bypass_info = bypass_detector.detect_bypass("Phase 4", 33, agent_step_evidence)
-
-    # v1.3.0: Get tolerance info
-    tolerance_info = None
-    if tolerance_extractor:
-        tolerance_info = tolerance_extractor.get_tolerance_for_step(33)
-
     try:
-        # Validate WAF hours with v1.3.0 enhanced parameters
         waf_result = llm_validator.validate_waf_hours(
-            work_type=work_type,
-            invoice_labour_hours=invoice_labour_hours,
-            waf_total_hours=waf_total_hours,
+            work_type=inputs["work_type"],
+            invoice_labour_hours=inputs["invoice_labour_hours"],
+            waf_total_hours=inputs["waf_total_hours"],
             agent_decision=phase_output.get("decision", "Continue"),
             agent_reason=phase_output.get("rejection_reason"),
-            agent_step_passed=agent_step_passed,
-            agent_step_evidence=agent_step_evidence,
-            bypass_info=bypass_info,
-            tolerance_info=tolerance_info,
+            agent_step_passed=inputs["agent_step_passed"],
+            agent_step_evidence=inputs["agent_step_evidence"],
+            bypass_info=inputs["bypass_info"],
+            tolerance_info=inputs["tolerance_info"],
         )
 
-        # Validate data source usage (no preprocessing in general agent)
-        data_source_validations = data_source_validator.validate_data_source_usage(
-            extraction_data=extraction_data,
-            preprocessing_data={},
-            agent_phase_output=phase_output,
+        data_source_validations = (
+            data_source_validator.validate_data_source_usage(
+                extraction_data=extraction_data,
+                preprocessing_data={},
+                agent_phase_output=phase_output,
+            )
         )
-
-        # Check for data source violations
         ds_violations = [v for v in data_source_validations if not v.is_valid]
-        has_ds_violations = len(ds_violations) > 0
 
-        waf_valid = waf_result.get("valid", True)
-        waf_confidence = waf_result.get("confidence", 0.5)
+        rule_compliance, violated_rules, compliance_explanation, severity = (
+            _build_phase4_compliance(waf_result, ds_violations)
+        )
 
-        if not waf_valid or has_ds_violations:
-            is_violation = not waf_valid or has_ds_violations
-            rule_compliance, confidence_suffix = _apply_confidence_gating(
-                is_violation=is_violation, confidence=waf_confidence
-            )
-
-            violated_rules = []
-            if not waf_valid and rule_compliance == "VIOLATION":
-                violated_rules.extend(
-                    waf_result.get("violated_rules", ["Step 33", "Rule 33.1"])
-                )
-            if has_ds_violations and rule_compliance == "VIOLATION":
-                violated_rules.extend(["Section 0"])
-
-            explanation_parts = []
-            if not waf_valid:
-                explanation_parts.append(f"WAF: {waf_result.get('reasoning', '')}")
-            if has_ds_violations:
-                ds_issues = [v.issue for v in ds_violations if v.issue]
-                explanation_parts.append(f"Data Sources: {'; '.join(ds_issues)}")
-
-            compliance_explanation = " | ".join(explanation_parts) + confidence_suffix
-            severity = (
-                waf_result.get("severity") or "HIGH" if has_ds_violations else None
-            )
-
-            if rule_compliance != "VIOLATION":
-                severity = "LOW"
-        else:
-            rule_compliance = "COMPLIANT"
-            violated_rules = []
-            compliance_explanation = f"WAF check {'skipped (exempt)' if waf_result.get('work_type_exempt') else 'passed'}"
-            severity = None
-
+        bypass_info = inputs["bypass_info"]
         return PhaseValidation(
             phase_name="Phase 4",
             case_id=case_id,
             agent_action=phase_output.get("decision") or "Continue",
             agent_reason=phase_output.get("rejection_reason") or "Not provided",
-            expected_action_per_rules=waf_result.get("expected_decision", "Continue"),
+            expected_action_per_rules=waf_result.get(
+                "expected_decision", "Continue"
+            ),
             rule_compliance=rule_compliance,
             preprocessing_evidence={
-                "work_type": work_type,
-                "invoice_labour_hours": invoice_labour_hours,
-                "waf_total_hours": waf_total_hours,
+                "work_type": inputs["work_type"],
+                "invoice_labour_hours": inputs["invoice_labour_hours"],
+                "waf_total_hours": inputs["waf_total_hours"],
                 "work_type_exempt": waf_result.get("work_type_exempt", False),
-                "agent_step_found": agent_step33 is not None,
+                "agent_step_found": inputs["agent_step33"] is not None,
                 "agent_bypassed": bypass_info.get("bypassed", False)
                 if bypass_info
                 else False,
                 "bypass_valid": bypass_info.get("is_valid_bypass")
                 if bypass_info
                 else None,
-                "hours_within_tolerance": waf_result.get("hours_within_tolerance"),
+                "hours_within_tolerance": waf_result.get(
+                    "hours_within_tolerance"
+                ),
                 "hours_within_investigator_tolerance": waf_result.get(
                     "hours_within_investigator_tolerance"
                 ),
@@ -4227,11 +4554,13 @@ def _validate_phase4(
                 "exemption_correctly_applied": waf_result.get(
                     "exemption_correctly_applied", True
                 ),
-                "hours_within_tolerance": waf_result.get("hours_within_tolerance"),
-                "agent_step_evidence": agent_step_evidence[:200]
-                if agent_step_evidence
+                "hours_within_tolerance": waf_result.get(
+                    "hours_within_tolerance"
+                ),
+                "agent_step_evidence": inputs["agent_step_evidence"][:200]
+                if inputs["agent_step_evidence"]
                 else None,
-                "agent_step_passed": agent_step_passed,
+                "agent_step_passed": inputs["agent_step_passed"],
             },
             applicable_rules=["Step 33", "Rule 33.1", "Section 0"],
             compliance_explanation=compliance_explanation,
@@ -4240,17 +4569,21 @@ def _validate_phase4(
             if not violated_rules
             else [],
             data_source_validations=data_source_validations,
-            correction_needed=compliance_explanation if violated_rules else None,
+            correction_needed=compliance_explanation
+            if violated_rules
+            else None,
             correction_priority=severity if severity else "LOW",
         )
 
     except Exception as e:
         print(f"    Phase 4 validation failed: {str(e)[:100]}")
-        return _fallback_phase_validation("Phase 4", case_id, phase_output, str(e))
+        return _fallback_phase_validation(
+            "Phase 4", case_id, phase_output, str(e)
+        )
 
 
 def _validate_phase_generic(
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     phase_name: str,
     llm_validator: LLMRulesValidatorReconstructed,
     extraction_data: dict,
@@ -4284,7 +4617,9 @@ def _validate_phase_generic(
             ),
             rule_compliance=result.get("rule_compliance", "INSUFFICIENT_DATA"),
             preprocessing_evidence=result.get("preprocessing_evidence", {}),
-            agent_intermediate_output=result.get("agent_intermediate_output", {}),
+            agent_intermediate_output=result.get(
+                "agent_intermediate_output", {}
+            ),
             applicable_rules=result.get("applicable_rules", []),
             compliance_explanation=result.get("compliance_explanation", ""),
             violated_rules=result.get("violated_rules", []),
@@ -4296,7 +4631,9 @@ def _validate_phase_generic(
     except Exception as e:
         print(f"    {phase_name} validation error: {str(e)[:100]}")
         phase_output = agent_phase_output.get("phase_output", {})
-        return _fallback_phase_validation(phase_name, case_id, phase_output, str(e))
+        return _fallback_phase_validation(
+            phase_name, case_id, phase_output, str(e)
+        )
 
 
 def _fallback_phase_validation(
@@ -4320,7 +4657,9 @@ def _fallback_phase_validation(
         or "Unknown"
     )
     agent_reason = (
-        phase_output.get("rejection_reason") or phase_output.get("reason") or "Unknown"
+        phase_output.get("rejection_reason")
+        or phase_output.get("reason")
+        or "Unknown"
     )
 
     # v1.4.0: Detect infrastructure errors and mark as INCONCLUSIVE
@@ -4328,9 +4667,7 @@ def _fallback_phase_validation(
 
     if is_infra_error:
         rule_compliance = "INCONCLUSIVE"
-        compliance_explanation = (
-            f"Infrastructure failure (will retry on next run): {error_message[:150]}"
-        )
+        compliance_explanation = f"Infrastructure failure (will retry on next run): {error_message[:150]}"
         correction_priority = "LOW"  # Not an agent issue
     else:
         rule_compliance = "INSUFFICIENT_DATA"
@@ -4361,7 +4698,7 @@ def _apply_confidence_gating(
     violation_compliance: str = "VIOLATION",
     compliant_compliance: str = "COMPLIANT",
     config: InvestigationConfig = None,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """
     Apply confidence-based gating to violation determination.
 
@@ -4406,15 +4743,238 @@ def _apply_confidence_gating(
 # ============================================================================
 
 
+def _create_skipped_phase_validation(
+    phase_name: str,
+    case_id: str,
+    first_rejection_phase: str | None,
+) -> PhaseValidation:
+    """Create a SKIPPED PhaseValidation for phases not executed due to early rejection."""
+    return PhaseValidation(
+        phase_name=phase_name,
+        case_id=case_id,
+        agent_action="Not Executed",
+        agent_reason=f"Skipped due to rejection in {first_rejection_phase}",
+        expected_action_per_rules="Not Executed",
+        rule_compliance="SKIPPED",
+        preprocessing_evidence={"skipped_reason": "early_rejection"},
+        agent_intermediate_output={},
+        applicable_rules=[],
+        compliance_explanation=f"Phase not executed due to earlier rejection in {first_rejection_phase}",
+        violated_rules=[],
+        followed_rules=[],
+        data_source_validations=[],
+        correction_needed=None,
+        correction_priority="LOW",
+    )
+
+
+def _run_phase_validations(
+    case_id: str,
+    case_data: dict[str, Any],
+    phases_executed: dict[str, bool],
+    first_rejection_phase: str | None,
+    llm_validator: LLMRulesValidatorReconstructed,
+    data_source_validator: DataSourceValidator,
+    bypass_detector: BypassDetector | None,
+    tolerance_extractor: ToleranceExtractor | None,
+) -> tuple[list[PhaseValidation], str | None]:
+    """Validate each phase, skipping those after an early rejection."""
+    phase_validations: list[PhaseValidation] = []
+    early_rejection_occurred = False
+
+    for phase_name in ["Phase 1", "Phase 2", "Phase 3", "Phase 4"]:
+        if early_rejection_occurred and not phases_executed.get(
+            phase_name, False
+        ):
+            print(f"    Validating {phase_name}...", end=" ")
+            print("- SKIPPED (early rejection)")
+            phase_validations.append(
+                _create_skipped_phase_validation(
+                    phase_name, case_id, first_rejection_phase
+                )
+            )
+            continue
+
+        print(f"    Validating {phase_name}...", end=" ")
+        phase_validation = validate_phase_against_rules(
+            case_data=case_data,
+            phase_name=phase_name,
+            llm_validator=llm_validator,
+            data_source_validator=data_source_validator,
+            bypass_detector=bypass_detector,
+            tolerance_extractor=tolerance_extractor,
+        )
+        phase_validations.append(phase_validation)
+
+        if phase_validation.agent_action in ["Reject", "REJECT"]:
+            early_rejection_occurred = True
+            if not first_rejection_phase:
+                first_rejection_phase = phase_name
+
+        compliance_symbol = {
+            "COMPLIANT": "OK",
+            "VIOLATION": "X",
+            "AMBIGUOUS": "?",
+            "INSUFFICIENT_DATA": "!",
+            "INCONCLUSIVE": "~",
+            "SKIPPED": "-",
+        }.get(phase_validation.rule_compliance, ".")
+        print(f"{compliance_symbol} {phase_validation.rule_compliance}")
+
+    return phase_validations, first_rejection_phase
+
+
+def _compute_compliance(
+    phase_validations: list[PhaseValidation],
+) -> tuple[float, str]:
+    """Compute compliance score and overall compliance label."""
+    excluded_statuses = {"SKIPPED", "INCONCLUSIVE", "INSUFFICIENT_DATA"}
+    executed = [
+        pv
+        for pv in phase_validations
+        if pv.rule_compliance not in excluded_statuses
+    ]
+    config = INVESTIGATION_CONFIG
+    compliant_count = sum(
+        1
+        for pv in executed
+        if pv.rule_compliance == "COMPLIANT"
+        or (
+            config.treat_ambiguous_as_compliant
+            and pv.rule_compliance == "AMBIGUOUS"
+        )
+    )
+    inconclusive_count = sum(
+        1 for pv in phase_validations if pv.rule_compliance == "INCONCLUSIVE"
+    )
+    if inconclusive_count == len(phase_validations):
+        print(
+            "  WARNING: All phases inconclusive due to infrastructure failures"
+        )
+        return 0.0, "INCONCLUSIVE"
+    if len(executed) > 0:
+        score = (compliant_count / len(executed)) * 100
+        if score == _FULL_COMPLIANCE_SCORE:
+            return score, "FULLY_COMPLIANT"
+        if score >= _PARTIAL_COMPLIANCE_THRESHOLD:
+            return score, "PARTIAL_VIOLATION"
+        return score, "MAJOR_VIOLATION"
+    return 100.0, "FULLY_COMPLIANT"
+
+
+def _assess_rejection(
+    processing_summary: CaseProcessingSummary,
+    phase_validations: list[PhaseValidation],
+) -> tuple[bool, bool | None, str | None]:
+    """Assess whether a rejection was justified."""
+    is_rejected = processing_summary.final_status == "Rejected"
+    justified = None
+    justification = None
+    if is_rejected and processing_summary.first_rejection_phase:
+        pv = next(
+            (
+                p
+                for p in phase_validations
+                if p.phase_name == processing_summary.first_rejection_phase
+            ),
+            None,
+        )
+        if pv:
+            justified = pv.rule_compliance == "COMPLIANT"
+            justification = pv.compliance_explanation
+    return is_rejected, justified, justification
+
+
+def _collect_data_source_violations(
+    phase_validations: list[PhaseValidation],
+) -> tuple[str, list[str]]:
+    """Collect data source violations and determine compliance label."""
+    violations: list[str] = []
+    for pv in phase_validations:
+        for dsv in pv.data_source_validations:
+            if not dsv.is_valid:
+                violations.append(
+                    dsv.issue or f"{dsv.field_name}: wrong source"
+                )
+    if not violations:
+        return "COMPLIANT", violations
+    if len(violations) <= _MAX_PARTIAL_VIOLATIONS:
+        return "PARTIAL", violations
+    return "VIOLATION", violations
+
+
+def _assess_extraction_quality(case_data: dict[str, Any]) -> tuple[str, float]:
+    """Assess extraction data quality."""
+    completeness = calculate_extraction_completeness(case_data)
+    if completeness >= _COMPLETE_EXTRACTION_THRESHOLD:
+        return "COMPLETE", completeness
+    if completeness >= _PARTIAL_EXTRACTION_THRESHOLD:
+        return "PARTIAL", completeness
+    return "POOR", completeness
+
+
+def _collect_recommendations(
+    phase_validations: list[PhaseValidation],
+) -> tuple[list[str], list[str], list[str]]:
+    """Collect agent improvements, rule clarifications, and data quality fixes."""
+    improvements: list[str] = []
+    clarifications: list[str] = []
+    quality_fixes: list[str] = []
+    for pv in phase_validations:
+        if pv.rule_compliance == "VIOLATION" and pv.correction_needed:
+            improvements.append(pv.correction_needed)
+        elif pv.rule_compliance == "AMBIGUOUS":
+            clarifications.extend(pv.applicable_rules)
+        elif pv.rule_compliance == "INSUFFICIENT_DATA":
+            quality_fixes.append(
+                f"{pv.phase_name}: {pv.compliance_explanation}"
+            )
+    return improvements, clarifications, quality_fixes
+
+
+def _run_layer3_validation(
+    case_id: str,
+    case_data: dict[str, Any],
+    per_group_validator: PerGroupValidator | None,
+    discovered_rules: dict | None,
+    enable_double_check: bool,
+) -> tuple[dict | None, int]:
+    """Run Layer 3 per-group validation if enabled."""
+    if not per_group_validator or not discovered_rules:
+        return None, 0
+    rule_groups = discovered_rules.get("rule_groups", [])
+    if not rule_groups:
+        return None, 0
+
+    print(f"  Layer 3: Per-group validation ({len(rule_groups)} groups)...")
+    results = per_group_validator.validate_all_groups(
+        case_id=case_id,
+        rule_groups=rule_groups,
+        case_data=case_data,
+        enable_double_check=enable_double_check,
+    )
+    violations = results.get("total_violations", 0)
+    dc_stats = results.get("double_check_stats", {})
+    if violations > 0:
+        print(f"    Layer 3 result: {violations} violation(s) found")
+    else:
+        print("    Layer 3 result: All rule groups compliant")
+    if dc_stats.get("discarded", 0) > 0:
+        print(
+            f"    Double-check: {dc_stats['discarded']} violation(s) discarded as inconsistent"
+        )
+    return results, violations
+
+
 def investigate_agent_case(
     case_id: str,
-    case_data: Dict[str, Any],
+    case_data: dict[str, Any],
     llm_validator: LLMRulesValidatorReconstructed,
     data_source_validator: DataSourceValidator,
     bypass_detector: BypassDetector = None,
     tolerance_extractor: ToleranceExtractor = None,
     per_group_validator: PerGroupValidator = None,
-    discovered_rules: dict = None,
+    discovered_rules: dict | None = None,
     enable_double_check: bool = True,
 ) -> AgentCaseInvestigation:
     """
@@ -4427,235 +4987,91 @@ def investigate_agent_case(
     _ensure_gcp_initialized()
     print(f"  Investigating case {case_id}...")
 
-    # Extract processing summary
     processing_summary = extract_processing_summary(case_data)
 
-    # v1.3.1: Determine which phases were actually executed
-    # Map phase names to their agent_outputs keys
+    # Determine which phases were actually executed
     phase_key_map = {
         "Phase 1": "phase1",
         "Phase 2": "phase2",
         "Phase 3": "phase3",
         "Phase 4": "phase4",
     }
-
-    # Check which phases have actual output files
     agent_outputs = case_data.get("agent_outputs", {})
-    phases_executed = {}
-    for phase_name, key in phase_key_map.items():
-        phase_data = agent_outputs.get(key, {})
-        # Phase was executed if it has meaningful content (not empty dict)
-        phases_executed[phase_name] = bool(
-            phase_data and phase_data.get("decision") or phase_data.get("validations")
+    phases_executed = {
+        pn: bool(
+            agent_outputs.get(k, {}).get("decision")
+            or agent_outputs.get(k, {}).get("validations")
         )
-
-    # Find first rejection phase (phases after this weren't executed)
+        for pn, k in phase_key_map.items()
+    }
     first_rejection_phase = (
         processing_summary.first_rejection_phase if processing_summary else None
     )
 
-    # Validate each phase
-    phase_validations = []
-    phases_to_validate = ["Phase 1", "Phase 2", "Phase 3", "Phase 4"]
-    early_rejection_occurred = False
-
-    for phase_name in phases_to_validate:
-        # v1.3.1: Skip phases that weren't executed due to early rejection
-        if early_rejection_occurred and not phases_executed.get(phase_name, False):
-            print(f"    Validating {phase_name}...", end=" ")
-            print("- SKIPPED (early rejection)")
-            # Create a SKIPPED validation result
-            phase_validation = PhaseValidation(
-                phase_name=phase_name,
-                case_id=case_id,
-                agent_action="Not Executed",
-                agent_reason=f"Skipped due to rejection in {first_rejection_phase}",
-                expected_action_per_rules="Not Executed",
-                rule_compliance="SKIPPED",
-                preprocessing_evidence={"skipped_reason": "early_rejection"},
-                agent_intermediate_output={},
-                applicable_rules=[],
-                compliance_explanation=f"Phase not executed due to earlier rejection in {first_rejection_phase}",
-                violated_rules=[],
-                followed_rules=[],
-                data_source_validations=[],
-                correction_needed=None,
-                correction_priority="LOW",
-            )
-            phase_validations.append(phase_validation)
-            continue
-
-        print(f"    Validating {phase_name}...", end=" ")
-
-        # v1.3.0: Pass new classes to phase validation
-        phase_validation = validate_phase_against_rules(
-            case_data=case_data,
-            phase_name=phase_name,
-            llm_validator=llm_validator,
-            data_source_validator=data_source_validator,
-            bypass_detector=bypass_detector,
-            tolerance_extractor=tolerance_extractor,
-        )
-
-        phase_validations.append(phase_validation)
-
-        # Check if this phase caused a rejection (for skipping subsequent phases)
-        if phase_validation.agent_action in ["Reject", "REJECT"]:
-            early_rejection_occurred = True
-            if not first_rejection_phase:
-                first_rejection_phase = phase_name
-
-        compliance_symbol = {
-            "COMPLIANT": "OK",
-            "VIOLATION": "X",
-            "AMBIGUOUS": "?",
-            "INSUFFICIENT_DATA": "!",
-            "INCONCLUSIVE": "~",  # v1.4.0: Infrastructure failure
-            "SKIPPED": "-",
-        }.get(phase_validation.rule_compliance, ".")
-
-        print(f"{compliance_symbol} {phase_validation.rule_compliance}")
-
-    # Calculate compliance score
-    # v1.4.0: Exclude SKIPPED, INCONCLUSIVE, and INSUFFICIENT_DATA from denominator
-    # These are not definitive results and should not affect compliance scoring
-    excluded_statuses = {"SKIPPED", "INCONCLUSIVE", "INSUFFICIENT_DATA"}
-    executed_phases = [
-        pv for pv in phase_validations if pv.rule_compliance not in excluded_statuses
-    ]
-
-    # v1.4.0: If treat_ambiguous_as_compliant is True, count AMBIGUOUS as compliant
-    config = INVESTIGATION_CONFIG
-    compliant_phases = sum(
-        1
-        for pv in executed_phases
-        if pv.rule_compliance == "COMPLIANT"
-        or (config.treat_ambiguous_as_compliant and pv.rule_compliance == "AMBIGUOUS")
+    # Phase validations
+    phase_validations, first_rejection_phase = _run_phase_validations(
+        case_id,
+        case_data,
+        phases_executed,
+        first_rejection_phase,
+        llm_validator,
+        data_source_validator,
+        bypass_detector,
+        tolerance_extractor,
     )
 
-    # v1.4.0: Check if all phases were inconclusive (infrastructure issue)
-    inconclusive_phases = [
-        pv for pv in phase_validations if pv.rule_compliance == "INCONCLUSIVE"
-    ]
-    all_phases_inconclusive = len(inconclusive_phases) == len(phase_validations)
+    # Compliance
+    compliance_score, overall_compliance = _compute_compliance(
+        phase_validations
+    )
 
-    if all_phases_inconclusive:
-        # All phases failed due to infrastructure - mark case as inconclusive
-        compliance_score = 0.0  # Will be marked as INCONCLUSIVE anyway
-        overall_compliance = "INCONCLUSIVE"
-        print("  WARNING: All phases inconclusive due to infrastructure failures")
-    elif len(executed_phases) > 0:
-        compliance_score = (compliant_phases / len(executed_phases)) * 100
-        # Determine overall compliance
-        if compliance_score == 100:
-            overall_compliance = "FULLY_COMPLIANT"
-        elif compliance_score >= 60:
-            overall_compliance = "PARTIAL_VIOLATION"
-        else:
-            overall_compliance = "MAJOR_VIOLATION"
-    else:
-        compliance_score = 100.0  # No phases executed = no violations
-        overall_compliance = "FULLY_COMPLIANT"
-
-    # Assess rejection justification
-    is_rejected = processing_summary.final_status == "Rejected"
-    rejection_justified = None
-    rejection_justification = None
-
-    if is_rejected and processing_summary.first_rejection_phase:
-        rejection_phase_name = processing_summary.first_rejection_phase
-        rejection_phase_val = next(
-            (pv for pv in phase_validations if pv.phase_name == rejection_phase_name),
-            None,
+    # Rejection assessment
+    is_rejected, rejection_justified, rejection_justification = (
+        _assess_rejection(
+            processing_summary,
+            phase_validations,
         )
-
-        if rejection_phase_val:
-            rejection_justified = rejection_phase_val.rule_compliance == "COMPLIANT"
-            rejection_justification = rejection_phase_val.compliance_explanation
+    )
 
     # Data source compliance
-    data_source_violations = []
-    for pv in phase_validations:
-        for dsv in pv.data_source_validations:
-            if not dsv.is_valid:
-                data_source_violations.append(
-                    dsv.issue or f"{dsv.field_name}: wrong source"
-                )
+    data_source_compliance, data_source_violations = (
+        _collect_data_source_violations(
+            phase_validations,
+        )
+    )
 
-    if not data_source_violations:
-        data_source_compliance = "COMPLIANT"
-    elif len(data_source_violations) <= 2:
-        data_source_compliance = "PARTIAL"
-    else:
-        data_source_compliance = "VIOLATION"
+    # Extraction quality
+    extraction_quality, extraction_completeness = _assess_extraction_quality(
+        case_data
+    )
 
-    # Assess extraction data quality
-    extraction_completeness = calculate_extraction_completeness(case_data)
+    # Recommendations
+    agent_improvements, rule_clarifications, data_quality_improvements = (
+        _collect_recommendations(phase_validations)
+    )
 
-    if extraction_completeness >= 90:
-        extraction_quality = "COMPLETE"
-    elif extraction_completeness >= 70:
-        extraction_quality = "PARTIAL"
-    else:
-        extraction_quality = "POOR"
-
-    # Collect recommendations
-    agent_improvements = []
-    rule_clarifications = []
-    data_quality_improvements = []
-
-    for pv in phase_validations:
-        if pv.rule_compliance == "VIOLATION" and pv.correction_needed:
-            agent_improvements.append(pv.correction_needed)
-        elif pv.rule_compliance == "AMBIGUOUS":
-            rule_clarifications.extend(pv.applicable_rules)
-        elif pv.rule_compliance == "INSUFFICIENT_DATA":
-            data_quality_improvements.append(
-                f"{pv.phase_name}: {pv.compliance_explanation}"
-            )
-
-    # Generate executive summary
+    # Summary
     summary_parts = [
         f"Case {case_id}",
         overall_compliance,
         f"compliance score {compliance_score:.1f}%",
     ]
-
     if is_rejected:
         justified_str = "justified" if rejection_justified else "UNJUSTIFIED"
         summary_parts.append(f"rejected ({justified_str})")
-
     if data_source_compliance != "COMPLIANT":
-        summary_parts.append(f"data source issues: {len(data_source_violations)}")
+        summary_parts.append(
+            f"data source issues: {len(data_source_violations)}"
+        )
 
-    # ======================================================================
-    # LAYER 3: Per-group validation (v2.0.0)
-    # ======================================================================
-    group_validation_results = None
-    layer3_violations = 0
-
-    if per_group_validator and discovered_rules:
-        rule_groups = discovered_rules.get("rule_groups", [])
-        if rule_groups:
-            print(f"  Layer 3: Per-group validation ({len(rule_groups)} groups)...")
-            group_validation_results = per_group_validator.validate_all_groups(
-                case_id=case_id,
-                rule_groups=rule_groups,
-                case_data=case_data,
-                enable_double_check=enable_double_check,
-            )
-            layer3_violations = group_validation_results.get("total_violations", 0)
-
-            dc_stats = group_validation_results.get("double_check_stats", {})
-            if layer3_violations > 0:
-                print(f"    Layer 3 result: {layer3_violations} violation(s) found")
-            else:
-                print("    Layer 3 result: All rule groups compliant")
-            if dc_stats.get("discarded", 0) > 0:
-                print(
-                    f"    Double-check: {dc_stats['discarded']} violation(s) discarded as inconsistent"
-                )
-
+    # Layer 3
+    group_validation_results, layer3_violations = _run_layer3_validation(
+        case_id,
+        case_data,
+        per_group_validator,
+        discovered_rules,
+        enable_double_check,
+    )
     if layer3_violations > 0:
         summary_parts.append(f"layer3 violations: {layer3_violations}")
 
@@ -4688,12 +5104,27 @@ def investigate_agent_case(
 # ============================================================================
 
 
+def _classify_rejection_root_cause(details: dict) -> tuple[str, str]:
+    """Return (root_cause, recommendation) for a rejection pattern's detail bucket."""
+    if details["incorrect"] > details["legitimate"]:
+        return (
+            "RULE_VIOLATION",
+            f"Fix agent logic - {details['incorrect']} unjustified rejections",
+        )
+    if details["legitimate"] > 0:
+        return (
+            "CORRECT_REJECTION",
+            f"Rejections appear justified per rules ({details['legitimate']} cases)",
+        )
+    return ("DATA_QUALITY", "Review extraction data quality for these cases")
+
+
 def analyze_rejection_patterns(
-    case_investigations: List[AgentCaseInvestigation],
-) -> List[RejectionPattern]:
+    case_investigations: list[AgentCaseInvestigation],
+) -> list[RejectionPattern]:
     """Identify and analyze common rejection patterns across cases."""
-    rejection_reasons = []
-    rejection_details = defaultdict(
+    rejection_reasons: list[str] = []
+    rejection_details: dict[str, dict] = defaultdict(
         lambda: {
             "phase": None,
             "case_ids": [],
@@ -4708,11 +5139,10 @@ def analyze_rejection_patterns(
             continue
 
         rejection_phase = inv.processing_summary.first_rejection_phase
-        rejection_reason = inv.processing_summary.first_rejection_reason
-
-        if not rejection_reason:
-            rejection_reason = "Unknown rejection reason"
-
+        rejection_reason = (
+            inv.processing_summary.first_rejection_reason
+            or "Unknown rejection reason"
+        )
         rejection_reasons.append(rejection_reason)
 
         details = rejection_details[rejection_reason]
@@ -4734,34 +5164,21 @@ def analyze_rejection_patterns(
     patterns = []
     for reason, count in reason_counts.most_common():
         details = rejection_details[reason]
-
-        if details["incorrect"] > details["legitimate"]:
-            root_cause = "RULE_VIOLATION"
-            recommendation = (
-                f"Fix agent logic - {details['incorrect']} unjustified rejections"
+        root_cause, recommendation = _classify_rejection_root_cause(details)
+        patterns.append(
+            RejectionPattern(
+                rejection_reason=reason,
+                affected_phase=details["phase"] or "Unknown",
+                case_count=count,
+                percentage=(count / total_rejections) * 100,
+                example_case_ids=details["case_ids"][:5],
+                rule_reference=sorted(details["rules"])[:10],
+                legitimate_rejections=details["legitimate"],
+                incorrect_rejections=details["incorrect"],
+                root_cause_category=root_cause,
+                recommendation=recommendation,
             )
-        elif details["legitimate"] > 0:
-            root_cause = "CORRECT_REJECTION"
-            recommendation = (
-                f"Rejections appear justified per rules ({details['legitimate']} cases)"
-            )
-        else:
-            root_cause = "DATA_QUALITY"
-            recommendation = "Review extraction data quality for these cases"
-
-        pattern = RejectionPattern(
-            rejection_reason=reason,
-            affected_phase=details["phase"] or "Unknown",
-            case_count=count,
-            percentage=(count / total_rejections) * 100,
-            example_case_ids=details["case_ids"][:5],
-            rule_reference=sorted(list(details["rules"]))[:10],
-            legitimate_rejections=details["legitimate"],
-            incorrect_rejections=details["incorrect"],
-            root_cause_category=root_cause,
-            recommendation=recommendation,
         )
-        patterns.append(pattern)
 
     return patterns
 
@@ -4771,12 +5188,60 @@ def analyze_rejection_patterns(
 # ============================================================================
 
 
+def _aggregate_layer3_stats(
+    investigations: list[AgentCaseInvestigation],
+) -> dict[str, Any]:
+    """Compute Layer 3 aggregate statistics."""
+    layer3_cases = sum(
+        1 for inv in investigations if inv.group_validation_results
+    )
+    layer3_total = sum(inv.layer3_violations for inv in investigations)
+    layer3_avg = (
+        round(layer3_total / layer3_cases, 2) if layer3_cases > 0 else 0
+    )
+
+    total_dc = 0
+    discarded = 0
+    for inv in investigations:
+        if inv.group_validation_results:
+            dc = inv.group_validation_results.get("double_check_stats", {})
+            total_dc += dc.get("total", 0)
+            discarded += dc.get("discarded", 0)
+
+    dc_rate = round((discarded / total_dc * 100) if total_dc > 0 else 0, 2)
+    return {
+        "layer3_cases_validated": layer3_cases,
+        "layer3_total_violations": layer3_total,
+        "layer3_avg_violations_per_case": layer3_avg,
+        "double_check_count": total_dc,
+        "double_check_discarded": discarded,
+        "double_check_discard_rate": dc_rate,
+    }
+
+
+def _aggregate_top_recommendations(
+    investigations: list[AgentCaseInvestigation],
+) -> tuple[list[str], list[str], list[str]]:
+    """Aggregate top fixes, clarifications, and quality fixes."""
+    fixes: list[str] = []
+    clarifications: list[str] = []
+    quality: list[str] = []
+    for inv in investigations:
+        fixes.extend(inv.agent_improvements)
+        clarifications.extend(inv.rule_clarifications_needed)
+        quality.extend(inv.data_quality_improvements)
+    return (
+        [f for f, _ in Counter(fixes).most_common(10)],
+        [c for c, _ in Counter(clarifications).most_common(10)],
+        [q for q, _ in Counter(quality).most_common(10)],
+    )
+
+
 def aggregate_agent_investigations(
-    investigations: List[AgentCaseInvestigation],
-) -> Dict[str, Any]:
+    investigations: list[AgentCaseInvestigation],
+) -> dict[str, Any]:
     """Aggregate analysis across all investigated cases."""
     total_cases = len(investigations)
-
     if total_cases == 0:
         return {}
 
@@ -4788,14 +5253,14 @@ def aggregate_agent_investigations(
         for inv in investigations
         if inv.processing_summary.final_status == "Set Aside"
     )
-
     acceptance_rate = (accepted_cases / total_cases) * 100
     rejection_rate = (rejected_cases / total_cases) * 100
 
     # Rule compliance breakdown
-    # v1.4.0: Added INCONCLUSIVE category for infrastructure failures
     fully_compliant = sum(
-        1 for inv in investigations if inv.overall_rule_compliance == "FULLY_COMPLIANT"
+        1
+        for inv in investigations
+        if inv.overall_rule_compliance == "FULLY_COMPLIANT"
     )
     partial_violation = sum(
         1
@@ -4803,18 +5268,21 @@ def aggregate_agent_investigations(
         if inv.overall_rule_compliance == "PARTIAL_VIOLATION"
     )
     major_violation = sum(
-        1 for inv in investigations if inv.overall_rule_compliance == "MAJOR_VIOLATION"
+        1
+        for inv in investigations
+        if inv.overall_rule_compliance == "MAJOR_VIOLATION"
     )
     inconclusive = sum(
-        1 for inv in investigations if inv.overall_rule_compliance == "INCONCLUSIVE"
+        1
+        for inv in investigations
+        if inv.overall_rule_compliance == "INCONCLUSIVE"
     )
-
-    # v1.4.0: Calculate compliance rate excluding inconclusive cases
     conclusive_cases = total_cases - inconclusive
-    if conclusive_cases > 0:
-        overall_compliance_rate = (fully_compliant / conclusive_cases) * 100
-    else:
-        overall_compliance_rate = 0.0  # All cases inconclusive
+    overall_compliance_rate = (
+        (fully_compliant / conclusive_cases * 100)
+        if conclusive_cases > 0
+        else 0.0
+    )
 
     # Data source compliance
     data_source_compliant = sum(
@@ -4824,7 +5292,7 @@ def aggregate_agent_investigations(
         1 for inv in investigations if inv.data_source_compliance != "COMPLIANT"
     )
 
-    # Justified vs unjustified rejections
+    # Rejections
     justified_rejections = sum(
         1
         for inv in investigations
@@ -4842,15 +5310,20 @@ def aggregate_agent_investigations(
         if inv.processing_summary.first_rejection_phase:
             phase_rejections[inv.processing_summary.first_rejection_phase] += 1
 
-    phase1_rejection_rate = (phase_rejections.get("Phase 1", 0) / total_cases) * 100
-    phase2_rejection_rate = (phase_rejections.get("Phase 2", 0) / total_cases) * 100
-    # Phase 2.5 not used in general agent
-    phase3_rejection_rate = (phase_rejections.get("Phase 3", 0) / total_cases) * 100
-    phase4_rejection_rate = (phase_rejections.get("Phase 4", 0) / total_cases) * 100
+    phase1_rejection_rate = (
+        phase_rejections.get("Phase 1", 0) / total_cases
+    ) * 100
+    phase2_rejection_rate = (
+        phase_rejections.get("Phase 2", 0) / total_cases
+    ) * 100
+    phase3_rejection_rate = (
+        phase_rejections.get("Phase 3", 0) / total_cases
+    ) * 100
+    phase4_rejection_rate = (
+        phase_rejections.get("Phase 4", 0) / total_cases
+    ) * 100
 
-    # Analyze rejection patterns
     rejection_patterns = analyze_rejection_patterns(investigations)
-
     most_common_rejection_phase = (
         max(phase_rejections.items(), key=lambda x: x[1])[0]
         if phase_rejections
@@ -4861,109 +5334,71 @@ def aggregate_agent_investigations(
     )
 
     # Top rule violations
-    all_violated_rules = []
+    all_violated_rules: list[str] = []
     for inv in investigations:
         for pv in inv.phase_validations:
             all_violated_rules.extend(pv.violated_rules)
-
-    violated_rule_counts = Counter(all_violated_rules)
     top_rule_violations = [
         f"{rule} - {count} cases"
-        for rule, count in violated_rule_counts.most_common(10)
+        for rule, count in Counter(all_violated_rules).most_common(10)
     ]
 
     # Data quality impact
     cases_with_preprocessing_issues = sum(
         1
         for inv in investigations
-        if inv.preprocessing_data_quality
-        in ["PARTIAL", "POOR"]  # Now tracks extraction quality
+        if inv.preprocessing_data_quality in ["PARTIAL", "POOR"]
     )
-
     data_quality_rejections = sum(
         1
         for inv in investigations
-        if inv.is_rejected and inv.preprocessing_data_quality in ["PARTIAL", "POOR"]
+        if inv.is_rejected
+        and inv.preprocessing_data_quality in ["PARTIAL", "POOR"]
     )
-
     data_quality_impact = (
-        (data_quality_rejections / rejected_cases * 100) if rejected_cases > 0 else 0.0
+        (data_quality_rejections / rejected_cases * 100)
+        if rejected_cases > 0
+        else 0.0
     )
 
-    # Top recommendations
-    all_agent_fixes = []
-    all_rule_clarifications = []
-    all_data_quality_fixes = []
-
-    for inv in investigations:
-        all_agent_fixes.extend(inv.agent_improvements)
-        all_rule_clarifications.extend(inv.rule_clarifications_needed)
-        all_data_quality_fixes.extend(inv.data_quality_improvements)
-
-    agent_fix_counts = Counter(all_agent_fixes)
-    rule_clar_counts = Counter(all_rule_clarifications)
-    data_qual_counts = Counter(all_data_quality_fixes)
-
-    top_agent_fixes = [fix for fix, _ in agent_fix_counts.most_common(10)]
-    top_rule_clarifications = [clar for clar, _ in rule_clar_counts.most_common(10)]
-    top_data_quality_fixes = [fix for fix, _ in data_qual_counts.most_common(10)]
+    top_agent_fixes, top_rule_clarifications, top_data_quality_fixes = (
+        _aggregate_top_recommendations(investigations)
+    )
 
     # Executive summary
-    exec_summary_parts = [
+    exec_parts = [
         f"Investigated {total_cases} cases using reconstructed_rules_book.md v1.1.1",
         f"{rejection_rate:.1f}% rejection rate",
     ]
-
     if unjustified_rejections > 0:
         unjust_pct = (
-            (unjustified_rejections / rejected_cases * 100) if rejected_cases > 0 else 0
+            (unjustified_rejections / rejected_cases * 100)
+            if rejected_cases > 0
+            else 0
         )
-        exec_summary_parts.append(f"{unjust_pct:.1f}% unjustified rejections")
-
-    exec_summary_parts.append(
+        exec_parts.append(f"{unjust_pct:.1f}% unjustified rejections")
+    exec_parts.append(
         f"{most_common_rejection_phase} has highest rejection rate"
     )
-    exec_summary_parts.append(
+    exec_parts.append(
         f"Overall agent compliance: {overall_compliance_rate:.1f}%"
     )
-
     if data_source_violation > 0:
-        exec_summary_parts.append(
+        exec_parts.append(
             f"Data source violations: {data_source_violation} cases"
         )
 
-    # v2.0.0: Layer 3 aggregate statistics
-    layer3_cases = sum(1 for inv in investigations if inv.group_validation_results)
-    layer3_total_violations = sum(inv.layer3_violations for inv in investigations)
-    layer3_avg = (
-        round(layer3_total_violations / layer3_cases, 2) if layer3_cases > 0 else 0
-    )
-
-    total_double_checks = 0
-    discarded_violations = 0
-    for inv in investigations:
-        if inv.group_validation_results:
-            dc_stats = inv.group_validation_results.get("double_check_stats", {})
-            total_double_checks += dc_stats.get("total", 0)
-            discarded_violations += dc_stats.get("discarded", 0)
-
-    double_check_discard_rate = round(
-        (discarded_violations / total_double_checks * 100)
-        if total_double_checks > 0
-        else 0,
-        2,
-    )
-
-    if layer3_total_violations > 0:
-        exec_summary_parts.append(
-            f"Layer 3 found {layer3_total_violations} additional violation(s)"
+    layer3 = _aggregate_layer3_stats(investigations)
+    if layer3["layer3_total_violations"] > 0:
+        exec_parts.append(
+            f"Layer 3 found {layer3['layer3_total_violations']} additional violation(s)"
         )
-    if discarded_violations > 0:
-        exec_summary_parts.append(
-            f"Double-check discarded {discarded_violations} false positive(s)"
+    if layer3["double_check_discarded"] > 0:
+        exec_parts.append(
+            f"Double-check discarded {layer3['double_check_discarded']} false positive(s)"
         )
 
-    executive_summary = ". ".join(exec_summary_parts) + "."
+    executive_summary = ". ".join(exec_parts) + "."
 
     return {
         "rules_book_version": "reconstructed_rules_book.md v1.1.1",
@@ -4998,12 +5433,7 @@ def aggregate_agent_investigations(
         "top_data_quality_fixes": top_data_quality_fixes,
         "executive_summary": executive_summary,
         # v2.0.0: Layer 3 statistics
-        "layer3_cases_validated": layer3_cases,
-        "layer3_total_violations": layer3_total_violations,
-        "layer3_avg_violations_per_case": layer3_avg,
-        "double_check_count": total_double_checks,
-        "double_check_discarded": discarded_violations,
-        "double_check_discard_rate": double_check_discard_rate,
+        **layer3,
     }
 
 
@@ -5012,10 +5442,89 @@ def aggregate_agent_investigations(
 # ============================================================================
 
 
+def _print_word_wrapped(text: str, indent: str = "    ") -> None:
+    """Print text with word wrapping at _MAX_LINE_WIDTH."""
+    words = text.split()
+    line = indent
+    for word in words:
+        if len(line) + len(word) + 1 > _MAX_LINE_WIDTH:
+            print(line)
+            line = indent + word
+        else:
+            line += " " + word if line != indent else word
+    if line.strip():
+        print(line)
+
+
+def _print_violation_detail(pv: PhaseValidation) -> None:
+    """Print detailed violation info for a single phase."""
+    rules_str = ", ".join(pv.violated_rules) if pv.violated_rules else "Unknown"
+    print(f"\n  [{pv.phase_name}] {rules_str}")
+    print(f"  {'-' * 68}")
+    print(f"  Agent Did:     {pv.agent_action}")
+    if pv.agent_reason and pv.agent_reason != "Not provided":
+        print(f'                 Reason: "{pv.agent_reason}"')
+    print(f"  Should Have:   {pv.expected_action_per_rules}")
+
+    print("\n  Issue:")
+    _print_word_wrapped(pv.compliance_explanation)
+
+    if pv.correction_needed:
+        print(f"\n  Fix Required ({pv.correction_priority}):")
+        _print_word_wrapped(pv.correction_needed)
+
+    if pv.preprocessing_evidence:
+        relevant = {
+            k: v for k, v in pv.preprocessing_evidence.items() if v is not None
+        }
+        if relevant:
+            print("\n  Evidence:")
+            for key, value in list(relevant.items())[:5]:
+                print(f"    - {key}: {value}")
+
+
+def _print_layer3_violations(investigation: AgentCaseInvestigation) -> None:
+    """Print Layer 3 per-group violations section."""
+    if (
+        not investigation.group_validation_results
+        or investigation.layer3_violations == 0
+    ):
+        return
+    print(f"\n  {'=' * 70}")
+    print("  LAYER 3 VIOLATIONS (Per-Group Validation):")
+    print(f"  {'=' * 70}")
+
+    for violation in investigation.group_validation_results.get(
+        "all_violations", []
+    ):
+        group_id = violation.get(
+            "group_id", violation.get("rule_id", "unknown")
+        )
+        rule_id = violation.get("rule_id", "unknown")
+        desc = violation.get("violation_description", "")
+        evidence = violation.get("evidence", "")
+        confidence = violation.get("confidence", 0)
+        severity = violation.get("severity", "MEDIUM")
+
+        print(f"\n  [{group_id}] Rule: {rule_id} (severity: {severity})")
+        print(f"  {'-' * 68}")
+        print(f"  Violation: {desc[:200]}")
+        if evidence:
+            print(f"  Evidence: {evidence[:200]}")
+        print(f"  Confidence: {confidence:.0%}")
+
+    # Show double-check discards
+    dc_stats = investigation.group_validation_results.get(
+        "double_check_stats", {}
+    )
+    if dc_stats.get("discarded", 0) > 0:
+        print(
+            f"\n  DOUBLE-CHECK: {dc_stats['discarded']} violation(s) discarded as inconsistent (false positive reduction)"
+        )
+
+
 def print_case_investigation_report(investigation: AgentCaseInvestigation):
     """Print clear, actionable report for a single case investigation."""
-
-    # Count violations (exclude SKIPPED from counts)
     violations = [
         pv
         for pv in investigation.phase_validations
@@ -5027,148 +5536,31 @@ def print_case_investigation_report(investigation: AgentCaseInvestigation):
         if pv.rule_compliance == "COMPLIANT"
     ]
     skipped = [
-        pv for pv in investigation.phase_validations if pv.rule_compliance == "SKIPPED"
+        pv
+        for pv in investigation.phase_validations
+        if pv.rule_compliance == "SKIPPED"
     ]
     executed_phases = len(investigation.phase_validations) - len(skipped)
 
-    # Result header
-    if len(violations) == 0:
-        result_icon = "OK"
-        result_text = "COMPLIANT"
-        if len(skipped) > 0:
-            result_text += f" ({len(skipped)} phases skipped)"
-    else:
-        result_icon = "X"
-        result_text = (
-            f"VIOLATION ({len(violations)} of {executed_phases} executed phases failed)"
-        )
+    _print_report_header(investigation, violations, skipped, executed_phases)
+    _print_phase_results_table(investigation)
 
-    print(
-        f"\n  RESULT: {result_icon} {result_text} | Compliance Score: {investigation.compliance_score:.1f}%"
-    )
-
-    # Final status
-    status_info = f"Final Status: {investigation.processing_summary.final_status}"
-    if investigation.is_rejected:
-        justified = "Justified" if investigation.rejection_justified else "UNJUSTIFIED"
-        status_info += f" ({justified})"
-    print(f"  {status_info}")
-
-    # Phase results table
-    print("\n  PHASE RESULTS:")
-    phase_results = []
-    for pv in investigation.phase_validations:
-        if pv.rule_compliance == "COMPLIANT":
-            icon = "OK"
-        elif pv.rule_compliance == "VIOLATION":
-            icon = "X "
-        elif pv.rule_compliance == "INSUFFICIENT_DATA":
-            icon = "? "
-        else:
-            icon = "- "
-        phase_results.append(f"{pv.phase_name}: {icon} {pv.rule_compliance}")
-
-    # Print in two columns
-    for i in range(0, len(phase_results), 2):
-        left = phase_results[i] if i < len(phase_results) else ""
-        right = phase_results[i + 1] if i + 1 < len(phase_results) else ""
-        print(f"    {left:<35} {right}")
-
-    # Data source issues
     if investigation.data_source_violations:
         print("\n  DATA SOURCE VIOLATIONS (Section 0):")
         for ds_issue in investigation.data_source_violations[:3]:
             print(f"    - {ds_issue}")
 
-    # Detailed violations
     if violations:
         print(f"\n  {'=' * 70}")
-        print("  VIOLATIONS DETAIL (Agent behavior NOT compliant with rules book):")
+        print(
+            "  VIOLATIONS DETAIL (Agent behavior NOT compliant with rules book):"
+        )
         print(f"  {'=' * 70}")
-
         for pv in violations:
-            # Header with phase and violated rules
-            rules_str = ", ".join(pv.violated_rules) if pv.violated_rules else "Unknown"
-            print(f"\n  [{pv.phase_name}] {rules_str}")
-            print(f"  {'-' * 68}")
+            _print_violation_detail(pv)
 
-            # Agent action vs expected
-            print(f"  Agent Did:     {pv.agent_action}")
-            if pv.agent_reason and pv.agent_reason != "Not provided":
-                print(f'                 Reason: "{pv.agent_reason}"')
-            print(f"  Should Have:   {pv.expected_action_per_rules}")
+    _print_layer3_violations(investigation)
 
-            # Full explanation (not truncated)
-            print("\n  Issue:")
-            # Word wrap the explanation at ~70 chars
-            explanation = pv.compliance_explanation
-            words = explanation.split()
-            line = "    "
-            for word in words:
-                if len(line) + len(word) + 1 > 75:
-                    print(line)
-                    line = "    " + word
-                else:
-                    line += " " + word if line != "    " else word
-            if line.strip():
-                print(line)
-
-            # Correction needed
-            if pv.correction_needed:
-                print(f"\n  Fix Required ({pv.correction_priority}):")
-                correction = pv.correction_needed
-                words = correction.split()
-                line = "    "
-                for word in words:
-                    if len(line) + len(word) + 1 > 75:
-                        print(line)
-                        line = "    " + word
-                    else:
-                        line += " " + word if line != "    " else word
-                if line.strip():
-                    print(line)
-
-            # Evidence if available
-            if pv.preprocessing_evidence:
-                relevant_evidence = {
-                    k: v for k, v in pv.preprocessing_evidence.items() if v is not None
-                }
-                if relevant_evidence:
-                    print("\n  Evidence:")
-                    for key, value in list(relevant_evidence.items())[:5]:
-                        print(f"    - {key}: {value}")
-
-    # Layer 3 violations (v2.0.0)
-    if investigation.group_validation_results and investigation.layer3_violations > 0:
-        print(f"\n  {'=' * 70}")
-        print("  LAYER 3 VIOLATIONS (Per-Group Validation):")
-        print(f"  {'=' * 70}")
-
-        for violation in investigation.group_validation_results.get(
-            "all_violations", []
-        ):
-            group_id = violation.get("group_id", violation.get("rule_id", "unknown"))
-            rule_id = violation.get("rule_id", "unknown")
-            desc = violation.get("violation_description", "")
-            evidence = violation.get("evidence", "")
-            confidence = violation.get("confidence", 0)
-            severity = violation.get("severity", "MEDIUM")
-
-            print(f"\n  [{group_id}] Rule: {rule_id} (severity: {severity})")
-            print(f"  {'-' * 68}")
-            print(f"  Violation: {desc[:200]}")
-            if evidence:
-                print(f"  Evidence: {evidence[:200]}")
-            print(f"  Confidence: {confidence:.0%}")
-
-        # Show double-check discards
-        dc_stats = investigation.group_validation_results.get("double_check_stats", {})
-        if dc_stats.get("discarded", 0) > 0:
-            print(
-                f"\n  DOUBLE-CHECK: {dc_stats['discarded']} violation(s) discarded as inconsistent (false positive reduction)"
-            )
-
-    # If fully compliant
     if (
         len(violations) == 0
         and investigation.layer3_violations == 0
@@ -5179,9 +5571,99 @@ def print_case_investigation_report(investigation: AgentCaseInvestigation):
         )
 
 
-def print_aggregate_report(aggregate: Dict[str, Any]):
-    """Print formatted aggregate analysis report."""
+def _print_report_header(
+    investigation: AgentCaseInvestigation,
+    violations: list,
+    skipped: list,
+    executed_phases: int,
+) -> None:
+    """Print result header and final status."""
+    if len(violations) == 0:
+        result_icon = "OK"
+        result_text = "COMPLIANT"
+        if len(skipped) > 0:
+            result_text += f" ({len(skipped)} phases skipped)"
+    else:
+        result_icon = "X"
+        result_text = f"VIOLATION ({len(violations)} of {executed_phases} executed phases failed)"
 
+    print(
+        f"\n  RESULT: {result_icon} {result_text} | Compliance Score: {investigation.compliance_score:.1f}%"
+    )
+
+    status_info = (
+        f"Final Status: {investigation.processing_summary.final_status}"
+    )
+    if investigation.is_rejected:
+        justified = (
+            "Justified" if investigation.rejection_justified else "UNJUSTIFIED"
+        )
+        status_info += f" ({justified})"
+    print(f"  {status_info}")
+
+
+def _print_phase_results_table(investigation: AgentCaseInvestigation) -> None:
+    """Print the phase results table in two columns."""
+    print("\n  PHASE RESULTS:")
+    phase_results = []
+    for pv in investigation.phase_validations:
+        icon = {
+            "COMPLIANT": "OK",
+            "VIOLATION": "X ",
+            "INSUFFICIENT_DATA": "? ",
+        }.get(
+            pv.rule_compliance,
+            "- ",
+        )
+        phase_results.append(f"{pv.phase_name}: {icon} {pv.rule_compliance}")
+    for i in range(0, len(phase_results), 2):
+        left = phase_results[i] if i < len(phase_results) else ""
+        right = phase_results[i + 1] if i + 1 < len(phase_results) else ""
+        print(f"    {left:<35} {right}")
+
+
+def _print_aggregate_rejection_analysis(aggregate: dict[str, Any]) -> None:
+    """Print rejection analysis section of aggregate report."""
+    if aggregate["rejected_cases"] == 0:
+        return
+    print("\nREJECTION ANALYSIS:")
+    print(f"  Total rejections: {aggregate['rejected_cases']}")
+    print(
+        f"  Justified rejections: {aggregate['justified_rejections']} (correct per rules)"
+    )
+    print(
+        f"  Unjustified rejections: {aggregate['unjustified_rejections']} (agent errors!)"
+    )
+    if aggregate["unjustified_rejections"] > 0:
+        unjust_pct = (
+            aggregate["unjustified_rejections"] / aggregate["rejected_cases"]
+        ) * 100
+        print(f"    -> {unjust_pct:.1f}% of rejections are agent errors")
+
+
+def _print_aggregate_layer3(aggregate: dict[str, Any]) -> None:
+    """Print Layer 3 and double-check sections of aggregate report."""
+    if aggregate.get("layer3_cases_validated", 0) == 0:
+        return
+    print("\nLAYER 3 VALIDATION (Per-Group):")
+    print(f"  Cases validated: {aggregate['layer3_cases_validated']}")
+    print(f"  Total violations found: {aggregate['layer3_total_violations']}")
+    print(
+        f"  Average violations per case: {aggregate['layer3_avg_violations_per_case']}"
+    )
+    if aggregate.get("double_check_count", 0) > 0:
+        print("\nDOUBLE-CHECK MECHANISM:")
+        print(
+            f"  Total double-checks performed: {aggregate['double_check_count']}"
+        )
+        print(
+            f"  Violations discarded (inconsistent): {aggregate['double_check_discarded']}"
+        )
+        print(f"  Discard rate: {aggregate['double_check_discard_rate']:.1f}%")
+
+
+def print_aggregate_report(aggregate: dict[str, Any]):
+    """Print formatted aggregate analysis report."""
     print(f"\n{'=' * 80}")
     print("AGGREGATE ANALYSIS (Reconstructed Rules Book)")
     print("=" * 80)
@@ -5204,31 +5686,22 @@ def print_aggregate_report(aggregate: Dict[str, Any]):
     )
     print(f"  Partial violations: {aggregate['partial_violation_cases']} cases")
     print(f"  Major violations: {aggregate['major_violation_cases']} cases")
-    # v1.4.0: Show inconclusive cases (infrastructure failures)
     inconclusive = aggregate.get("inconclusive_cases", 0)
     if inconclusive > 0:
         print(f"  Inconclusive (infra failures): {inconclusive} cases")
-        print("    -> These cases need re-investigation when infrastructure is stable")
+        print(
+            "    -> These cases need re-investigation when infrastructure is stable"
+        )
 
     print("\nDATA SOURCE COMPLIANCE (Section 0):")
-    print(f"  Compliant: {aggregate.get('data_source_compliant_cases', 0)} cases")
-    print(f"  Violations: {aggregate.get('data_source_violation_cases', 0)} cases")
+    print(
+        f"  Compliant: {aggregate.get('data_source_compliant_cases', 0)} cases"
+    )
+    print(
+        f"  Violations: {aggregate.get('data_source_violation_cases', 0)} cases"
+    )
 
-    if aggregate["rejected_cases"] > 0:
-        print("\nREJECTION ANALYSIS:")
-        print(f"  Total rejections: {aggregate['rejected_cases']}")
-        print(
-            f"  Justified rejections: {aggregate['justified_rejections']} (correct per rules)"
-        )
-        print(
-            f"  Unjustified rejections: {aggregate['unjustified_rejections']} (agent errors!)"
-        )
-
-        if aggregate["unjustified_rejections"] > 0:
-            unjust_pct = (
-                aggregate["unjustified_rejections"] / aggregate["rejected_cases"]
-            ) * 100
-            print(f"    -> {unjust_pct:.1f}% of rejections are agent errors")
+    _print_aggregate_rejection_analysis(aggregate)
 
     print("\nTOP REJECTION PATTERNS:")
     for i, pattern in enumerate(aggregate["rejection_patterns"][:5], 1):
@@ -5244,7 +5717,6 @@ def print_aggregate_report(aggregate: Dict[str, Any]):
     print("\nPHASE-SPECIFIC REJECTION RATES:")
     print(f"  Phase 1: {aggregate['phase1_rejection_rate']:.1f}%")
     print(f"  Phase 2: {aggregate['phase2_rejection_rate']:.1f}%")
-    # Phase 2.5 not used in general agent
     print(f"  Phase 3: {aggregate['phase3_rejection_rate']:.1f}%")
     print(f"  Phase 4: {aggregate['phase4_rejection_rate']:.1f}%")
     print(f"  -> Highest: {aggregate['most_common_rejection_phase']}")
@@ -5273,22 +5745,7 @@ def print_aggregate_report(aggregate: Dict[str, Any]):
         for i, clar in enumerate(aggregate["top_rule_clarifications"][:5], 1):
             print(f"  {i}. {clar}")
 
-    # v2.0.0: Layer 3 statistics
-    if aggregate.get("layer3_cases_validated", 0) > 0:
-        print("\nLAYER 3 VALIDATION (Per-Group):")
-        print(f"  Cases validated: {aggregate['layer3_cases_validated']}")
-        print(f"  Total violations found: {aggregate['layer3_total_violations']}")
-        print(
-            f"  Average violations per case: {aggregate['layer3_avg_violations_per_case']}"
-        )
-
-        if aggregate.get("double_check_count", 0) > 0:
-            print("\nDOUBLE-CHECK MECHANISM:")
-            print(f"  Total double-checks performed: {aggregate['double_check_count']}")
-            print(
-                f"  Violations discarded (inconsistent): {aggregate['double_check_discarded']}"
-            )
-            print(f"  Discard rate: {aggregate['double_check_discard_rate']:.1f}%")
+    _print_aggregate_layer3(aggregate)
 
 
 # ============================================================================
@@ -5296,13 +5753,14 @@ def print_aggregate_report(aggregate: Dict[str, Any]):
 # ============================================================================
 
 
-def main():
-    """Main entry point."""
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Agent Investigation using reconstructed_rules_book.md (v2.1.0 - Domain-Independent)"
     )
-
-    parser.add_argument("--case", "-c", type=str, help="Single case ID to investigate")
+    parser.add_argument(
+        "--case", "-c", type=str, help="Single case ID to investigate"
+    )
     parser.add_argument(
         "--num-cases", "-n", type=int, default=0, help="Limit cases (0=all)"
     )
@@ -5324,23 +5782,23 @@ def main():
         action="store_true",
         help="Include compliant cases in output",
     )
-    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
-
-    # v2.0.0: Layer 2/3 CLI flags
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Verbose output"
+    )
     parser.add_argument(
         "--disable-layer3",
         action="store_true",
-        help="Disable Layer 3 per-group validation (only run Layer 1)",
+        help="Disable Layer 3 per-group validation",
     )
     parser.add_argument(
         "--disable-double-check",
         action="store_true",
-        help="Disable double-check mechanism for violations",
+        help="Disable double-check mechanism",
     )
     parser.add_argument(
         "--force-rule-discovery",
         action="store_true",
-        help="Force re-discovery of rules (ignore cache)",
+        help="Force re-discovery of rules",
     )
     parser.add_argument(
         "--show-rule-groups",
@@ -5352,156 +5810,65 @@ def main():
         "-m",
         type=str,
         default=None,
-        help="Path to master_data.yaml or .json for domain-agnostic configuration",
+        help="Path to master_data config file",
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Load master data (schema-driven configuration)
-    global _MASTER_DATA
-    if _MASTER_DATA_AVAILABLE:
-        try:
-            _MASTER_DATA = load_master_data(args.master_data)
-        except FileNotFoundError:
-            print("  Note: No master data file found. Using hardcoded defaults.")
-        except Exception as e:
-            print(
-                f"  Note: Failed to load master data ({e}). Using hardcoded defaults."
-            )
+def _filter_cases(
+    case_ids: list[str], args: argparse.Namespace
+) -> list[str] | None:
+    """Filter and select cases to investigate based on CLI args.
 
-    domain_name = _MASTER_DATA.display_name if _MASTER_DATA else "Invoice Processing"
-    print("=" * 80)
-    print(f"AGENT PROCESSING INVESTIGATION ({domain_name})")
-    print("=" * 80)
-    print("\nVersion: 2.1.0 (Domain-Independent)")
-    print("\nConfiguration:")
-    print(f"  Domain: {domain_name}")
-    if _MASTER_DATA and _MASTER_DATA.source_path:
-        print(f"  Master data: {_MASTER_DATA.source_path}")
-    print(f"  Project: {PROJECT_ID}")
-    print(f"  Model: {GEMINI_PRO_MODEL}")
-    print(f"  Rules: {RULES_BOOK_PATH}")
-    print(f"  Layer 3: {'DISABLED' if args.disable_layer3 else 'ENABLED'}")
-    print(f"  Double-check: {'DISABLED' if args.disable_double_check else 'ENABLED'}")
-
-    # ==================================================================
-    # LAYER 2: Rule Discovery (v2.0.0)
-    # ==================================================================
-    print(f"\n{'=' * 80}")
-    print("LAYER 2: Rule Discovery")
-    print("=" * 80)
-
-    rule_discovery = RuleDiscoveryEngine(RULES_BOOK_CONTENT, GEMINI_PRO_MODEL)
-    discovered_rules = rule_discovery.discover_rules(
-        force_refresh=args.force_rule_discovery
-    )
-
-    rule_groups = discovered_rules.get("rule_groups", [])
-    print(f"  Discovered {len(rule_groups)} rule groups:")
-    for group in rule_groups:
-        rules_count = len(group.get("rules", []))
-        print(
-            f"    - {group.get('name', group.get('group_id', '?'))}: {rules_count} rule(s)"
-        )
-
-    # --show-rule-groups: print details and exit
-    if args.show_rule_groups:
-        print(f"\n{'=' * 80}")
-        print(f"DISCOVERED RULE GROUPS ({len(rule_groups)} total)")
-        print("=" * 80)
-        for group in rule_groups:
-            print(f"\nGroup: {group.get('name', '?')}")
-            print(f"  ID: {group.get('group_id', '?')}")
-            print(f"  Description: {group.get('description', '')}")
-            print(f"  Phases: {', '.join(group.get('applicable_phases', []))}")
-            print(f"  Source: {group.get('source_section', 'N/A')}")
-            print(f"  Rules ({len(group.get('rules', []))}):")
-            for rule in group.get("rules", []):
-                rule_id = rule.get("rule_id", "?")
-                desc = str(rule.get("description", ""))[:80]
-                print(f"    - {rule_id}: {desc}")
-        return
-
-    # ==================================================================
-    # Initialize validators (using discovered rules)
-    # ==================================================================
-    llm_validator = LLMRulesValidatorReconstructed(RULES_EXTRACTOR, GEMINI_PRO_MODEL)
-    data_source_validator = DataSourceValidator(rule_discovery=rule_discovery)
-
-    # v1.3.0 + v2.0.0: Initialize with discovered rules
-    bypass_detector = BypassDetector(RULES_EXTRACTOR, rule_discovery=rule_discovery)
-    tolerance_extractor = ToleranceExtractor(
-        RULES_EXTRACTOR, rule_discovery=rule_discovery
-    )
-
-    # v2.0.0: Layer 3 validator
-    per_group_validator = None
-    if not args.disable_layer3:
-        per_group_validator = PerGroupValidator(GEMINI_PRO_MODEL, INVESTIGATION_CONFIG)
-    else:
-        discovered_rules = None  # Prevent Layer 3 from running
-
-    # Discover cases
-    print("\nDiscovering cases in agent output directory...")
-    case_ids = discover_agent_cases(AGENT_OUTPUT_DIR)
-    print(f"Found {len(case_ids)} processed cases")
-
-    if not case_ids:
-        print("\nNo cases found. Exiting.")
-        return
-
-    # Filter cases
-    cases_to_investigate = []
-
+    Returns None if a requested single case was not found.
+    """
     if args.case:
         if args.case in case_ids:
-            cases_to_investigate = [args.case]
-        else:
-            print(f"\nError: Case {args.case} not found")
-            return
-    else:
-        if args.status_filter != "ALL":
-            print(f"  Filtering by status: {args.status_filter}...")
-            for case_id in case_ids:
-                case_data = load_agent_case_data(case_id)
-                summary = extract_processing_summary(case_data)
+            return [args.case]
+        print(f"\nError: Case {args.case} not found")
+        return None
 
-                if (
-                    args.status_filter == "ACCEPTED"
-                    and summary.final_status != "Rejected"
-                ):
-                    cases_to_investigate.append(case_id)
-                elif (
-                    args.status_filter == "REJECTED"
-                    and summary.final_status == "Rejected"
-                ):
-                    cases_to_investigate.append(case_id)
-                elif (
-                    args.status_filter == "SET_ASIDE"
-                    and summary.final_status == "Set Aside"
-                ):
-                    cases_to_investigate.append(case_id)
-        else:
-            cases_to_investigate = case_ids
+    if args.status_filter != "ALL":
+        _status_map = {
+            "ACCEPTED": lambda s: s != "Rejected",
+            "REJECTED": lambda s: s == "Rejected",
+            "SET_ASIDE": lambda s: s == "Set Aside",
+        }
+        predicate = _status_map.get(args.status_filter, lambda _s: True)
+        print(f"  Filtering by status: {args.status_filter}...")
+        filtered = []
+        for cid in case_ids:
+            summary = extract_processing_summary(load_agent_case_data(cid))
+            if predicate(summary.final_status):
+                filtered.append(cid)
+        cases = filtered
+    else:
+        cases = case_ids
 
     if args.num_cases > 0:
-        cases_to_investigate = cases_to_investigate[: args.num_cases]
+        cases = cases[: args.num_cases]
+    return cases
 
-    print(f"\nInvestigating {len(cases_to_investigate)} cases...")
 
-    # Investigate each case
-    investigations = []
-    total = len(cases_to_investigate)
-
-    for idx, case_id in enumerate(cases_to_investigate, start=1):
+def _run_case_investigations(
+    cases: list[str],
+    args: argparse.Namespace,
+    llm_validator: LLMRulesValidatorReconstructed,
+    data_source_validator: DataSourceValidator,
+    bypass_detector: BypassDetector,
+    tolerance_extractor: ToleranceExtractor,
+    per_group_validator: PerGroupValidator | None,
+    discovered_rules: dict | None,
+) -> list[AgentCaseInvestigation]:
+    """Run investigations on all selected cases."""
+    investigations: list[AgentCaseInvestigation] = []
+    total = len(cases)
+    for idx, case_id in enumerate(cases, start=1):
         print(f"\n{'=' * 80}")
         print(f"[{idx}/{total}] Case: {case_id}")
         print(f"{'=' * 80}")
-
         case_data = load_agent_case_data(case_id)
-
         try:
-            # v2.0.0: Pass Layer 3 components + double-check flag
             investigation = investigate_agent_case(
                 case_id=case_id,
                 case_data=case_data,
@@ -5513,47 +5880,37 @@ def main():
                 discovered_rules=discovered_rules,
                 enable_double_check=not args.disable_double_check,
             )
-
             investigations.append(investigation)
-
-            # Print detailed case report
             print_case_investigation_report(investigation)
-
             print("\n  OK Investigation completed")
-
         except Exception as e:
             print(f"  X Investigation failed: {str(e)[:200]}")
-            import traceback
-
             if args.verbose:
                 traceback.print_exc()
+    return investigations
 
-    if not investigations:
-        print("\n\nNo successful investigations.")
-        return
 
-    # Aggregate analysis
-    print(f"\n{'=' * 80}")
-    aggregate = aggregate_agent_investigations(investigations)
-    print_aggregate_report(aggregate)
-
-    # Save results
+def _save_results(
+    investigations: list[AgentCaseInvestigation],
+    aggregate: dict[str, Any],
+) -> None:
+    """Save investigation results and aggregate summary to disk."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = INVESTIGATION_OUTPUT_DIR / f"agent_investigation_reconst_{timestamp}"
+    output_dir = (
+        INVESTIGATION_OUTPUT_DIR / f"agent_investigation_reconst_{timestamp}"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save individual investigations
     case_dir = output_dir / "case_investigations"
     case_dir.mkdir(exist_ok=True)
-
     for investigation in investigations:
         case_file = case_dir / f"{investigation.case_id}.json"
         with open(case_file, "w", encoding="utf-8") as f:
-            json.dump(investigation.model_dump(), f, indent=2, ensure_ascii=False)
+            json.dump(
+                investigation.model_dump(), f, indent=2, ensure_ascii=False
+            )
 
-    # Save aggregate summary
     summary_file = output_dir / "aggregate_summary.json"
-
     summary_model = AgentInvestigationSummary(
         timestamp=datetime.now().isoformat(),
         rules_book_version=aggregate.get(
@@ -5576,15 +5933,20 @@ def main():
         overall_compliance_rate=aggregate["overall_compliance_rate"],
         phase1_rejection_rate=aggregate["phase1_rejection_rate"],
         phase2_rejection_rate=aggregate["phase2_rejection_rate"],
-        # Phase 2.5 not used in general agent
         phase3_rejection_rate=aggregate["phase3_rejection_rate"],
         phase4_rejection_rate=aggregate["phase4_rejection_rate"],
         justified_rejections=aggregate["justified_rejections"],
         unjustified_rejections=aggregate["unjustified_rejections"],
         top_rule_violations=aggregate["top_rule_violations"],
-        data_source_compliant_cases=aggregate.get("data_source_compliant_cases", 0),
-        data_source_violation_cases=aggregate.get("data_source_violation_cases", 0),
-        cases_with_preprocessing_issues=aggregate["cases_with_preprocessing_issues"],
+        data_source_compliant_cases=aggregate.get(
+            "data_source_compliant_cases", 0
+        ),
+        data_source_violation_cases=aggregate.get(
+            "data_source_violation_cases", 0
+        ),
+        cases_with_preprocessing_issues=aggregate[
+            "cases_with_preprocessing_issues"
+        ],
         data_quality_impact_on_rejections=aggregate[
             "data_quality_impact_on_rejections"
         ],
@@ -5593,7 +5955,6 @@ def main():
         top_data_quality_fixes=aggregate["top_data_quality_fixes"],
         executive_summary=aggregate["executive_summary"],
     )
-
     with open(summary_file, "w", encoding="utf-8") as f:
         json.dump(summary_model.model_dump(), f, indent=2, ensure_ascii=False)
 
@@ -5602,6 +5963,165 @@ def main():
     print(f"  Summary: {summary_file}")
     print(f"  Cases: {case_dir}/")
     print("=" * 80)
+
+
+def _load_and_print_config(args) -> str:
+    """Load master data, print configuration header, and return domain name."""
+    if _MASTER_DATA_AVAILABLE:
+        try:
+            _master_data_container["instance"] = load_master_data(
+                args.master_data
+            )
+        except FileNotFoundError:
+            print(
+                "  Note: No master data file found. Using hardcoded defaults."
+            )
+        except Exception as e:
+            print(
+                f"  Note: Failed to load master data ({e}). Using hardcoded defaults."
+            )
+
+    _md = _get_master_data()
+    domain_name = _md.display_name if _md else "Invoice Processing"
+    print("=" * 80)
+    print(f"AGENT PROCESSING INVESTIGATION ({domain_name})")
+    print("=" * 80)
+    print("\nVersion: 2.1.0 (Domain-Independent)")
+    print("\nConfiguration:")
+    print(f"  Domain: {domain_name}")
+    if _md and _md.source_path:
+        print(f"  Master data: {_md.source_path}")
+    print(f"  Project: {_gcp_config['PROJECT_ID']}")
+    print(f"  Model: {_gcp_config['GEMINI_PRO_MODEL']}")
+    print(f"  Rules: {RULES_BOOK_PATH}")
+    print(f"  Layer 3: {'DISABLED' if args.disable_layer3 else 'ENABLED'}")
+    print(
+        f"  Double-check: {'DISABLED' if args.disable_double_check else 'ENABLED'}"
+    )
+    return domain_name
+
+
+def _init_validators(args, rule_discovery):
+    """Initialize all validators and return them as a tuple.
+
+    Returns (llm_validator, data_source_validator, bypass_detector,
+             tolerance_extractor, per_group_validator, discovered_rules).
+    """
+    llm_validator = LLMRulesValidatorReconstructed(
+        RULES_EXTRACTOR, _gcp_config["GEMINI_PRO_MODEL"]
+    )
+    data_source_validator = DataSourceValidator(rule_discovery=rule_discovery)
+    bypass_detector = BypassDetector(
+        RULES_EXTRACTOR, rule_discovery=rule_discovery
+    )
+    tolerance_extractor = ToleranceExtractor(
+        RULES_EXTRACTOR, rule_discovery=rule_discovery
+    )
+    per_group_validator = None
+    discovered = rule_discovery.discover_rules(force_refresh=False)
+    if not args.disable_layer3:
+        per_group_validator = PerGroupValidator(
+            _gcp_config["GEMINI_PRO_MODEL"], INVESTIGATION_CONFIG
+        )
+    else:
+        discovered = None
+    return (
+        llm_validator,
+        data_source_validator,
+        bypass_detector,
+        tolerance_extractor,
+        per_group_validator,
+        discovered,
+    )
+
+
+def main():
+    """Main entry point."""
+    args = _build_arg_parser().parse_args()
+    _load_and_print_config(args)
+
+    # Layer 2: Rule Discovery
+    print(f"\n{'=' * 80}")
+    print("LAYER 2: Rule Discovery")
+    print("=" * 80)
+    rule_discovery = RuleDiscoveryEngine(
+        RULES_BOOK_CONTENT, _gcp_config["GEMINI_PRO_MODEL"]
+    )
+    discovered_rules = rule_discovery.discover_rules(
+        force_refresh=args.force_rule_discovery
+    )
+    rule_groups = discovered_rules.get("rule_groups", [])
+    print(f"  Discovered {len(rule_groups)} rule groups:")
+    for group in rule_groups:
+        print(
+            f"    - {group.get('name', group.get('group_id', '?'))}: {len(group.get('rules', []))} rule(s)"
+        )
+
+    if args.show_rule_groups:
+        _print_rule_groups_detail(rule_groups)
+        return
+
+    # Initialize validators
+    (
+        llm_validator,
+        data_source_validator,
+        bypass_detector,
+        tolerance_extractor,
+        per_group_validator,
+        discovered_rules,
+    ) = _init_validators(args, rule_discovery)
+
+    # Discover and filter cases
+    print("\nDiscovering cases in agent output directory...")
+    case_ids = discover_agent_cases(AGENT_OUTPUT_DIR)
+    print(f"Found {len(case_ids)} processed cases")
+    if not case_ids:
+        print("\nNo cases found. Exiting.")
+        return
+
+    cases = _filter_cases(case_ids, args)
+    if cases is None:
+        return
+    print(f"\nInvestigating {len(cases)} cases...")
+
+    # Run investigations
+    investigations = _run_case_investigations(
+        cases,
+        args,
+        llm_validator,
+        data_source_validator,
+        bypass_detector,
+        tolerance_extractor,
+        per_group_validator,
+        discovered_rules,
+    )
+    if not investigations:
+        print("\n\nNo successful investigations.")
+        return
+
+    # Aggregate and report
+    print(f"\n{'=' * 80}")
+    aggregate = aggregate_agent_investigations(investigations)
+    print_aggregate_report(aggregate)
+    _save_results(investigations, aggregate)
+
+
+def _print_rule_groups_detail(rule_groups: list) -> None:
+    """Print detailed discovered rule groups and exit."""
+    print(f"\n{'=' * 80}")
+    print(f"DISCOVERED RULE GROUPS ({len(rule_groups)} total)")
+    print("=" * 80)
+    for group in rule_groups:
+        print(f"\nGroup: {group.get('name', '?')}")
+        print(f"  ID: {group.get('group_id', '?')}")
+        print(f"  Description: {group.get('description', '')}")
+        print(f"  Phases: {', '.join(group.get('applicable_phases', []))}")
+        print(f"  Source: {group.get('source_section', 'N/A')}")
+        print(f"  Rules ({len(group.get('rules', []))}):")
+        for rule in group.get("rules", []):
+            print(
+                f"    - {rule.get('rule_id', '?')}: {str(rule.get('description', ''))[:80]}"
+            )
 
 
 if __name__ == "__main__":

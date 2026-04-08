@@ -13,9 +13,9 @@ import json
 import logging
 
 from .case_loader import CaseLoaderAgent
+from .impact_assessor import ImpactAssessorAgent
 from .rule_discoverer import RuleDiscovererAgent
 from .rule_writer import RuleWriterAgent
-from .impact_assessor import ImpactAssessorAgent
 
 logger = logging.getLogger("LearningAgent.SafeRuleOrchestrator")
 
@@ -132,7 +132,9 @@ class SafeRuleOrchestrator:
             collateral_info = self._format_collateral_info(
                 impact_report.collateral_matches
             )
-            collateral_ids = [m.case_id for m in impact_report.collateral_matches]
+            collateral_ids = [
+                m.case_id for m in impact_report.collateral_matches
+            ]
             revision_log.append(
                 {
                     "attempt": attempt + 1,
@@ -170,7 +172,9 @@ class SafeRuleOrchestrator:
 
         # Build final result
         display = self._writer.format_rule_display(rule_dict)
-        has_collateral = bool(impact_report and impact_report.collateral_matches)
+        has_collateral = bool(
+            impact_report and impact_report.collateral_matches
+        )
 
         impact_dict = {}
         if impact_report:
@@ -209,7 +213,9 @@ class SafeRuleOrchestrator:
             ),
         }
 
-    def _error_result(self, rule_dict: dict, revision_log: list, error: str) -> dict:
+    def _error_result(
+        self, rule_dict: dict, revision_log: list, error: str
+    ) -> dict:
         """Build an error result."""
         return {
             "success": False,
@@ -253,7 +259,9 @@ class SafeRuleOrchestrator:
                 "success": False,
                 "error": f"Rule generation failed: {proposed.parse_errors}",
                 "rule": proposed.rule_dict,
-                "rule_json": json.dumps(proposed.rule_dict, indent=2, default=str),
+                "rule_json": json.dumps(
+                    proposed.rule_dict, indent=2, default=str
+                ),
                 "display": "",
                 "impact": {},
                 "attempts": 0,
@@ -289,13 +297,17 @@ class SafeRuleOrchestrator:
         case_data = self._loader.run(case_id)
 
         # Step 1: Revise based on SME feedback
-        proposed = self._discoverer.revise(case_data, current_rule, sme_feedback, "")
+        proposed = self._discoverer.revise(
+            case_data, current_rule, sme_feedback, ""
+        )
         if not proposed.success:
             return {
                 "success": False,
                 "error": f"Rule revision failed: {proposed.parse_errors}",
                 "rule": proposed.rule_dict,
-                "rule_json": json.dumps(proposed.rule_dict, indent=2, default=str),
+                "rule_json": json.dumps(
+                    proposed.rule_dict, indent=2, default=str
+                ),
                 "display": "",
                 "impact": {},
                 "attempts": 0,

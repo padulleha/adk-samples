@@ -12,9 +12,6 @@ authors = [
     { name = "Tanya Dixit", email = "dixittanya@google.com" },
 ]
 
-[project.urls]
-Repository = "https://github.com/GoogleCloudPlatform/adk-samples"
-
 dependencies = [
     "google-adk>=1.0.0",
     "google-cloud-aiplatform>=1.38.0",
@@ -24,6 +21,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/GoogleCloudPlatform/adk-samples"
 
 [dependency-groups]
 dev = [

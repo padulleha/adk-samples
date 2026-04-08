@@ -32,21 +32,21 @@ Usage:
     python eval.py --ground-truth "exemplary_data" --agent-output output --tolerance 0.05
 """
 
+import argparse
+import json
 import os
 import re
 import sys
-import json
-import argparse
-from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from pathlib import Path
+from typing import Any, Optional
 
 # Optional LLM imports — only needed when --skip-llm is NOT set
 _LLM_AVAILABLE = False
 try:
+    from dotenv import load_dotenv
     from google.cloud import aiplatform
     from vertexai.generative_models import GenerativeModel
-    from dotenv import load_dotenv
 
     _LLM_AVAILABLE = True
 except ImportError:
@@ -59,8 +59,7 @@ PROJECT_ROOT = AGENT_DIR.parent.parent
 
 # Master data loader — provides domain-agnostic configuration
 sys.path.insert(0, str(AGENT_DIR / "invoice_processing" / "shared_libraries"))
-from master_data_loader import load_master_data, MasterData  # noqa: E402
-
+from master_data_loader import MasterData, load_master_data  # noqa: E402
 
 # ============================================================================
 # CONFIGURATION
@@ -110,7 +109,7 @@ _FALLBACK_STATUS_TO_DECISION = {
 # ============================================================================
 
 
-def parse_amount(value: str) -> Optional[float]:
+def parse_amount(value: str) -> float | None:
     """Parse a formatted amount string like '1,100.00' into a float."""
     if value is None:
         return None
@@ -131,21 +130,23 @@ def amounts_match(gt_val: str, agent_val: str, tolerance: float) -> bool:
     return abs(gt - agent) <= tolerance
 
 
-def normalize_string(val: Optional[str]) -> str:
+def normalize_string(val: str | None) -> str:
     """Normalize a string for comparison (lowercase, strip, collapse whitespace)."""
     if val is None:
         return ""
     return " ".join(str(val).strip().lower().split())
 
 
-def status_to_decision(status: str, mapping: Optional[Dict[str, str]] = None) -> str:
+def status_to_decision(
+    status: str, mapping: dict[str, str] | None = None
+) -> str:
     """Map Invoice Status to decision class using master data or fallback."""
     if mapping is None:
         mapping = _FALLBACK_STATUS_TO_DECISION
     return mapping.get(normalize_string(status), "UNKNOWN")
 
 
-def parse_line_items(line_items_field: Any) -> List[dict]:
+def parse_line_items(line_items_field: Any) -> list[dict]:
     """Parse the Line Items field (stored as JSON string in the schema)."""
     if line_items_field is None:
         return []
@@ -161,7 +162,7 @@ def parse_line_items(line_items_field: Any) -> List[dict]:
 
 
 def compare_decision(
-    gt: dict, agent: dict, master: Optional[MasterData] = None
+    gt: dict, agent: dict, master: MasterData | None = None
 ) -> dict:
     """Compare the processing decision (ACCEPT/REJECT/SET_ASIDE).
 
@@ -181,10 +182,14 @@ def compare_decision(
     agent_status = agent
     for part in parts:
         gt_status = (
-            (gt_status or {}).get(part, "") if isinstance(gt_status, dict) else ""
+            (gt_status or {}).get(part, "")
+            if isinstance(gt_status, dict)
+            else ""
         )
         agent_status = (
-            (agent_status or {}).get(part, "") if isinstance(agent_status, dict) else ""
+            (agent_status or {}).get(part, "")
+            if isinstance(agent_status, dict)
+            else ""
         )
 
     gt_decision = status_to_decision(gt_status, status_mapping)
@@ -231,7 +236,9 @@ def compare_financials(gt: dict, agent: dict, tolerance: float) -> dict:
     # Currency
     gt_currency = gt_details.get("Currency", "")
     agent_currency = agent_details.get("Currency", "")
-    currency_match = normalize_string(gt_currency) == normalize_string(agent_currency)
+    currency_match = normalize_string(gt_currency) == normalize_string(
+        agent_currency
+    )
     results["Currency"] = {
         "ground_truth": gt_currency,
         "agent": agent_currency,
@@ -339,12 +346,50 @@ def compare_field_group(
     return results
 
 
+def _compare_per_line_fields(
+    gt_items: list[dict],
+    agent_items: list[dict],
+    per_line_fields: list[str],
+    per_line_types: dict[str, str],
+    tolerance: float,
+) -> list[dict]:
+    """Compare individual line items field by field, returning a list of diffs."""
+    line_diffs = []
+    gt_sorted = sorted(gt_items, key=lambda x: x.get("line_number", 0))
+    agent_sorted = sorted(agent_items, key=lambda x: x.get("line_number", 0))
+
+    for gt_line, agent_line in zip(gt_sorted, agent_sorted, strict=False):
+        diffs = {}
+        for field_name in per_line_fields:
+            gt_val = str(gt_line.get(field_name, "")).strip()
+            agent_val = str(agent_line.get(field_name, "")).strip()
+
+            if per_line_types.get(field_name) == "amount":
+                match = amounts_match(gt_val, agent_val, tolerance)
+            else:
+                match = normalize_string(gt_val) == normalize_string(agent_val)
+
+            if not match:
+                diffs[field_name] = {"ground_truth": gt_val, "agent": agent_val}
+
+        if diffs:
+            line_diffs.append(
+                {
+                    "line_number": gt_line.get("line_number"),
+                    "differences": diffs,
+                }
+            )
+    return line_diffs
+
+
 def compare_line_items_generic(
     gt: dict, agent: dict, group_config: dict, tolerance: float
 ) -> dict:
     """Schema-driven line item comparison using per_line_fields from master data."""
     source_key = group_config.get("source", "Line Items")
-    per_line_fields = [f["name"] for f in group_config.get("per_line_fields", [])]
+    per_line_fields = [
+        f["name"] for f in group_config.get("per_line_fields", [])
+    ]
     per_line_types = {
         f["name"]: f.get("type", "string")
         for f in group_config.get("per_line_fields", [])
@@ -360,8 +405,12 @@ def compare_line_items_generic(
     # Compare item codes (if item_code is in per_line_fields)
     code_field = "item_code" if "item_code" in per_line_fields else None
     if code_field:
-        gt_codes = sorted([item.get(code_field, "UNKNOWN") for item in gt_items])
-        agent_codes = sorted([item.get(code_field, "UNKNOWN") for item in agent_items])
+        gt_codes = sorted(
+            [item.get(code_field, "UNKNOWN") for item in gt_items]
+        )
+        agent_codes = sorted(
+            [item.get(code_field, "UNKNOWN") for item in agent_items]
+        )
         codes_match = gt_codes == agent_codes
     else:
         gt_codes = []
@@ -369,11 +418,17 @@ def compare_line_items_generic(
         codes_match = True
 
     # Compare totals for amount fields
-    amount_fields = [f for f in per_line_fields if per_line_types.get(f) == "amount"]
+    amount_fields = [
+        f for f in per_line_fields if per_line_types.get(f) == "amount"
+    ]
     total_checks = {}
     for af in amount_fields:
-        gt_total = sum(parse_amount(item.get(af, "0")) or 0 for item in gt_items)
-        agent_total = sum(parse_amount(item.get(af, "0")) or 0 for item in agent_items)
+        gt_total = sum(
+            parse_amount(item.get(af, "0")) or 0 for item in gt_items
+        )
+        agent_total = sum(
+            parse_amount(item.get(af, "0")) or 0 for item in agent_items
+        )
         total_checks[af] = {
             "ground_truth": f"{gt_total:.2f}",
             "agent": f"{agent_total:.2f}",
@@ -381,32 +436,13 @@ def compare_line_items_generic(
         }
 
     # Per-line comparison (by line_number if counts match)
-    line_diffs = []
-    if count_match:
-        gt_sorted = sorted(gt_items, key=lambda x: x.get("line_number", 0))
-        agent_sorted = sorted(agent_items, key=lambda x: x.get("line_number", 0))
-
-        for gt_line, agent_line in zip(gt_sorted, agent_sorted):
-            diffs = {}
-            for field_name in per_line_fields:
-                gt_val = str(gt_line.get(field_name, "")).strip()
-                agent_val = str(agent_line.get(field_name, "")).strip()
-
-                if per_line_types.get(field_name) == "amount":
-                    match = amounts_match(gt_val, agent_val, tolerance)
-                else:
-                    match = normalize_string(gt_val) == normalize_string(agent_val)
-
-                if not match:
-                    diffs[field_name] = {"ground_truth": gt_val, "agent": agent_val}
-
-            if diffs:
-                line_diffs.append(
-                    {
-                        "line_number": gt_line.get("line_number"),
-                        "differences": diffs,
-                    }
-                )
+    line_diffs = (
+        _compare_per_line_fields(
+            gt_items, agent_items, per_line_fields, per_line_types, tolerance
+        )
+        if count_match
+        else []
+    )
 
     all_match = (
         count_match
@@ -416,7 +452,11 @@ def compare_line_items_generic(
     )
 
     result = {
-        "count": {"ground_truth": gt_count, "agent": agent_count, "match": count_match},
+        "count": {
+            "ground_truth": gt_count,
+            "agent": agent_count,
+            "match": count_match,
+        },
         "line_diffs": line_diffs,
         "all_match": all_match,
     }
@@ -443,11 +483,15 @@ def compare_line_items(gt: dict, agent: dict, tolerance: float) -> dict:
 
     # Compare item codes
     gt_codes = sorted([item.get("item_code", "UNKNOWN") for item in gt_items])
-    agent_codes = sorted([item.get("item_code", "UNKNOWN") for item in agent_items])
+    agent_codes = sorted(
+        [item.get("item_code", "UNKNOWN") for item in agent_items]
+    )
     codes_match = gt_codes == agent_codes
 
     # Compare total line cost
-    gt_total = sum(parse_amount(item.get("line_cost", "0")) or 0 for item in gt_items)
+    gt_total = sum(
+        parse_amount(item.get("line_cost", "0")) or 0 for item in gt_items
+    )
     agent_total = sum(
         parse_amount(item.get("line_cost", "0")) or 0 for item in agent_items
     )
@@ -455,7 +499,9 @@ def compare_line_items(gt: dict, agent: dict, tolerance: float) -> dict:
 
     # Compare total tax
     gt_tax = sum(parse_amount(item.get("tax", "0")) or 0 for item in gt_items)
-    agent_tax = sum(parse_amount(item.get("tax", "0")) or 0 for item in agent_items)
+    agent_tax = sum(
+        parse_amount(item.get("tax", "0")) or 0 for item in agent_items
+    )
     tax_match = abs(gt_tax - agent_tax) <= tolerance
 
     # Per-line comparison (by line_number if counts match)
@@ -463,9 +509,11 @@ def compare_line_items(gt: dict, agent: dict, tolerance: float) -> dict:
     if count_match:
         # Sort both by line_number
         gt_sorted = sorted(gt_items, key=lambda x: x.get("line_number", 0))
-        agent_sorted = sorted(agent_items, key=lambda x: x.get("line_number", 0))
+        agent_sorted = sorted(
+            agent_items, key=lambda x: x.get("line_number", 0)
+        )
 
-        for gt_line, agent_line in zip(gt_sorted, agent_sorted):
+        for gt_line, agent_line in zip(gt_sorted, agent_sorted, strict=False):
             diffs = {}
             for field in [
                 "item_code",
@@ -482,7 +530,9 @@ def compare_line_items(gt: dict, agent: dict, tolerance: float) -> dict:
                 if field in ["line_cost", "unit_cost", "tax", "quantity"]:
                     match = amounts_match(gt_val, agent_val, tolerance)
                 else:
-                    match = normalize_string(gt_val) == normalize_string(agent_val)
+                    match = normalize_string(gt_val) == normalize_string(
+                        agent_val
+                    )
 
                 if not match:
                     diffs[field] = {"ground_truth": gt_val, "agent": agent_val}
@@ -504,7 +554,11 @@ def compare_line_items(gt: dict, agent: dict, tolerance: float) -> dict:
     )
 
     return {
-        "count": {"ground_truth": gt_count, "agent": agent_count, "match": count_match},
+        "count": {
+            "ground_truth": gt_count,
+            "agent": agent_count,
+            "match": count_match,
+        },
         "item_codes": {
             "ground_truth": gt_codes,
             "agent": agent_codes,
@@ -568,9 +622,9 @@ def llm_evaluate(
     model: "GenerativeModel",
     ground_truth: dict,
     agent_output: dict,
-    mismatches: List[str],
+    mismatches: list[str],
     domain_name: str = "invoice processing",
-) -> Optional[dict]:
+) -> dict | None:
     """Run a single LLM call to get holistic alignment verdict."""
     prompt = LLM_EVAL_PROMPT_TEMPLATE.format(
         domain_name=domain_name,
@@ -613,13 +667,179 @@ def llm_evaluate(
 # ============================================================================
 
 
+def _run_comparison_groups(
+    gt: dict, agent: dict, master: MasterData, tolerance: float
+) -> dict[str, dict]:
+    """Run all schema-driven comparison groups and return results keyed by group ID."""
+    group_results = {}
+    for group in master.get_eval_comparison_groups():
+        group_id = group.get("id", "")
+        if group.get("type", "") == "array":
+            group_results[group_id] = compare_line_items_generic(
+                gt, agent, group, tolerance
+            )
+        else:
+            group_results[group_id] = compare_field_group(
+                gt, agent, group, tolerance
+            )
+    return group_results
+
+
+def _collect_schema_mismatches(
+    decision: dict, group_results: dict[str, dict]
+) -> list[str]:
+    """Collect mismatch descriptions from schema-driven comparison results."""
+    mismatches = []
+    if not decision["match"]:
+        mismatches.append(
+            f"Decision: {decision['ground_truth_decision']} vs {decision['agent_decision']}"
+        )
+    for _group_id, result in group_results.items():
+        if result.get("all_match"):
+            continue
+        for key, val in result.items():
+            if isinstance(val, dict) and "match" in val and not val["match"]:
+                mismatches.append(
+                    f"{key}: {val.get('ground_truth', '?')} vs {val.get('agent', '?')}"
+                )
+    return mismatches
+
+
+def _evaluate_schema_driven(
+    case_id: str,
+    gt: dict,
+    agent: dict,
+    decision: dict,
+    master: MasterData,
+    tolerance: float,
+) -> dict:
+    """Evaluate a case using schema-driven comparison groups from master data."""
+    group_results = _run_comparison_groups(gt, agent, master, tolerance)
+    mismatches = _collect_schema_mismatches(decision, group_results)
+
+    all_correct = decision["match"] and all(
+        r.get("all_match", True) for r in group_results.values()
+    )
+
+    result_dict = {
+        "case_id": case_id,
+        "status": "PASS" if all_correct else "FAIL",
+        "all_correct": all_correct,
+        "decision": decision,
+        "mismatches": mismatches,
+    }
+    for gid, result in group_results.items():
+        result_dict[gid] = result
+
+    # Keep backward-compatible keys for the standard invoice groups
+    for compat_key in ("financials", "vendor", "header", "line_items"):
+        if compat_key in group_results:
+            result_dict[compat_key] = group_results[compat_key]
+
+    return result_dict
+
+
+def _evaluate_legacy(
+    case_id: str,
+    gt: dict,
+    agent: dict,
+    decision: dict,
+    tolerance: float,
+) -> dict:
+    """Evaluate a case using hardcoded invoice-specific comparators (legacy fallback)."""
+    financials = compare_financials(gt, agent, tolerance)
+    vendor = compare_vendor(gt, agent)
+    header = compare_header(gt, agent)
+    line_items = compare_line_items(gt, agent, tolerance)
+
+    all_correct = (
+        decision["match"]
+        and financials["all_match"]
+        and vendor["all_match"]
+        and header["all_match"]
+        and line_items["all_match"]
+    )
+
+    mismatches = _collect_legacy_mismatches(
+        decision, financials, vendor, header, line_items
+    )
+
+    return {
+        "case_id": case_id,
+        "status": "PASS" if all_correct else "FAIL",
+        "all_correct": all_correct,
+        "decision": decision,
+        "financials": financials,
+        "vendor": vendor,
+        "header": header,
+        "line_items": line_items,
+        "mismatches": mismatches,
+    }
+
+
+def _collect_field_mismatches(section: dict, labels: list[str]) -> list[str]:
+    """Collect mismatch strings for a list of field labels from a comparison section."""
+    mismatches = []
+    for label in labels:
+        if not section[label]["match"]:
+            mismatches.append(
+                f"{label}: {section[label]['ground_truth']} vs {section[label]['agent']}"
+            )
+    return mismatches
+
+
+def _collect_line_item_mismatches(line_items: dict) -> list[str]:
+    """Collect mismatch strings from line item comparison results."""
+    mismatches = []
+    if not line_items["count"]["match"]:
+        mismatches.append(
+            f"Line item count: {line_items['count']['ground_truth']} vs {line_items['count']['agent']}"
+        )
+    if not line_items["item_codes"]["match"]:
+        mismatches.append("Item codes differ")
+    if not line_items["total_line_cost"]["match"]:
+        mismatches.append(
+            f"Line cost total: {line_items['total_line_cost']['ground_truth']} vs {line_items['total_line_cost']['agent']}"
+        )
+    return mismatches
+
+
+def _collect_legacy_mismatches(
+    decision: dict,
+    financials: dict,
+    vendor: dict,
+    header: dict,
+    line_items: dict,
+) -> list[str]:
+    """Collect mismatch descriptions from legacy comparator results."""
+    mismatches = []
+    if not decision["match"]:
+        mismatches.append(
+            f"Decision: {decision['ground_truth_decision']} vs {decision['agent_decision']}"
+        )
+    mismatches.extend(
+        _collect_field_mismatches(
+            financials,
+            ["Invoice Total", "Pretax Total", "Tax Amount", "Currency"],
+        )
+    )
+    mismatches.extend(
+        _collect_field_mismatches(vendor, ["Vendor Name", "Tax ID"])
+    )
+    mismatches.extend(
+        _collect_field_mismatches(header, ["Vendor Invoice", "Invoice Date"])
+    )
+    mismatches.extend(_collect_line_item_mismatches(line_items))
+    return mismatches
+
+
 def evaluate_case(
     case_id: str,
     gt_file: Path,
     agent_file: Path,
     tolerance: float,
-    llm_model: Optional[Any] = None,
-    master: Optional[MasterData] = None,
+    llm_model: Any | None = None,
+    master: MasterData | None = None,
 ) -> dict:
     """Evaluate a single case by comparing ground truth and agent output.
 
@@ -650,131 +870,20 @@ def evaluate_case(
     decision = compare_decision(gt, agent, master)
 
     # Field group comparisons — schema-driven or legacy fallback
-    group_results = {}
-    mismatches = []
-
     if master:
-        # Schema-driven: iterate comparison groups from master data
-        comparison_groups = master.get_eval_comparison_groups()
-        for group in comparison_groups:
-            group_id = group.get("id", "")
-            group_type = group.get("type", "")
-
-            if group_type == "array":
-                # Line item comparison
-                group_results[group_id] = compare_line_items_generic(
-                    gt, agent, group, tolerance
-                )
-            else:
-                # Field group comparison
-                group_results[group_id] = compare_field_group(
-                    gt, agent, group, tolerance
-                )
-
-        # Collect mismatches from all groups
-        if not decision["match"]:
-            mismatches.append(
-                f"Decision: {decision['ground_truth_decision']} vs {decision['agent_decision']}"
-            )
-
-        for group_id, result in group_results.items():
-            if result.get("all_match"):
-                continue
-            # For field groups, report individual field mismatches
-            for key, val in result.items():
-                if isinstance(val, dict) and "match" in val and not val["match"]:
-                    mismatches.append(
-                        f"{key}: {val.get('ground_truth', '?')} vs {val.get('agent', '?')}"
-                    )
-
-        # Overall verdict
-        all_correct = decision["match"] and all(
-            r.get("all_match", True) for r in group_results.values()
+        result_dict = _evaluate_schema_driven(
+            case_id, gt, agent, decision, master, tolerance
         )
-
-        # Build result with group IDs as keys
-        result_dict = {
-            "case_id": case_id,
-            "status": "PASS" if all_correct else "FAIL",
-            "all_correct": all_correct,
-            "decision": decision,
-            "mismatches": mismatches,
-        }
-        for group_id, result in group_results.items():
-            result_dict[group_id] = result
-
-        # Keep backward-compatible keys for the standard invoice groups
-        if "financials" in group_results:
-            result_dict["financials"] = group_results["financials"]
-        if "vendor" in group_results:
-            result_dict["vendor"] = group_results["vendor"]
-        if "header" in group_results:
-            result_dict["header"] = group_results["header"]
-        if "line_items" in group_results:
-            result_dict["line_items"] = group_results["line_items"]
-
     else:
-        # Legacy fallback: hardcoded invoice comparators
-        financials = compare_financials(gt, agent, tolerance)
-        vendor = compare_vendor(gt, agent)
-        header = compare_header(gt, agent)
-        line_items = compare_line_items(gt, agent, tolerance)
-
-        all_correct = (
-            decision["match"]
-            and financials["all_match"]
-            and vendor["all_match"]
-            and header["all_match"]
-            and line_items["all_match"]
-        )
-
-        if not decision["match"]:
-            mismatches.append(
-                f"Decision: {decision['ground_truth_decision']} vs {decision['agent_decision']}"
-            )
-        for label in ["Invoice Total", "Pretax Total", "Tax Amount", "Currency"]:
-            if not financials[label]["match"]:
-                mismatches.append(
-                    f"{label}: {financials[label]['ground_truth']} vs {financials[label]['agent']}"
-                )
-        for label in ["Vendor Name", "Tax ID"]:
-            if not vendor[label]["match"]:
-                mismatches.append(
-                    f"{label}: {vendor[label]['ground_truth']} vs {vendor[label]['agent']}"
-                )
-        for label in ["Vendor Invoice", "Invoice Date"]:
-            if not header[label]["match"]:
-                mismatches.append(
-                    f"{label}: {header[label]['ground_truth']} vs {header[label]['agent']}"
-                )
-        if not line_items["count"]["match"]:
-            mismatches.append(
-                f"Line item count: {line_items['count']['ground_truth']} vs {line_items['count']['agent']}"
-            )
-        if not line_items["item_codes"]["match"]:
-            mismatches.append("Item codes differ")
-        if not line_items["total_line_cost"]["match"]:
-            mismatches.append(
-                f"Line cost total: {line_items['total_line_cost']['ground_truth']} vs {line_items['total_line_cost']['agent']}"
-            )
-
-        result_dict = {
-            "case_id": case_id,
-            "status": "PASS" if all_correct else "FAIL",
-            "all_correct": all_correct,
-            "decision": decision,
-            "financials": financials,
-            "vendor": vendor,
-            "header": header,
-            "line_items": line_items,
-            "mismatches": mismatches,
-        }
+        result_dict = _evaluate_legacy(case_id, gt, agent, decision, tolerance)
 
     # LLM alignment verdict (optional)
     llm_verdict = None
     if llm_model is not None:
         domain_name = master.display_name if master else "invoice processing"
-        llm_verdict = llm_evaluate(llm_model, gt, agent, mismatches, domain_name)
+        llm_verdict = llm_evaluate(
+            llm_model, gt, agent, result_dict["mismatches"], domain_name
+        )
     result_dict["llm_verdict"] = llm_verdict
 
     return result_dict
@@ -785,8 +894,135 @@ def evaluate_case(
 # ============================================================================
 
 
+def _compute_decision_matrix(evaluated: list[dict]) -> dict[str, int]:
+    """Compute the confusion matrix for accept/reject decisions."""
+    matrix = {"TP": 0, "FP": 0, "FN": 0, "TN": 0}
+    for r in evaluated:
+        gt_d = r["decision"]["ground_truth_decision"]
+        ag_d = r["decision"]["agent_decision"]
+        if gt_d == "ACCEPT" and ag_d == "ACCEPT":
+            matrix["TP"] += 1
+        elif gt_d == "REJECT" and ag_d == "REJECT":
+            matrix["TN"] += 1
+        elif gt_d == "REJECT" and ag_d == "ACCEPT":
+            matrix["FP"] += 1
+        elif gt_d == "ACCEPT" and ag_d == "REJECT":
+            matrix["FN"] += 1
+    return matrix
+
+
+def _compute_group_and_field_stats_schema(
+    evaluated: list[dict], master: MasterData, total: int
+) -> tuple:
+    """Compute group-level and field-level accuracy using schema-driven config."""
+    group_accuracy = {}
+    field_stats = {}
+
+    for group in master.get_eval_comparison_groups():
+        group_id = group.get("id", "")
+        group_display = group.get("display_name", group_id)
+        group_type = group.get("type", "")
+
+        correct = sum(
+            1 for r in evaluated if r.get(group_id, {}).get("all_match", True)
+        )
+        group_accuracy[group_id] = {
+            "display_name": group_display,
+            "correct": correct,
+            "total": total,
+            "accuracy": correct / total,
+        }
+
+        if group_type != "array":
+            for field in group.get("fields", []):
+                fname = field["name"]
+                fc = sum(
+                    1
+                    for r in evaluated
+                    if r.get(group_id, {}).get(fname, {}).get("match", True)
+                )
+                field_stats[fname] = {
+                    "correct": fc,
+                    "total": total,
+                    "accuracy": fc / total,
+                }
+
+    return group_accuracy, field_stats
+
+
+def _compute_group_and_field_stats_legacy(
+    evaluated: list[dict], total: int
+) -> tuple:
+    """Compute group-level and field-level accuracy using legacy hardcoded fields."""
+    group_accuracy = {}
+    field_stats = {}
+
+    for group_key in ["financials", "vendor", "header", "line_items"]:
+        correct = sum(
+            1 for r in evaluated if r.get(group_key, {}).get("all_match", True)
+        )
+        group_accuracy[group_key] = {
+            "display_name": group_key.replace("_", " ").title(),
+            "correct": correct,
+            "total": total,
+            "accuracy": correct / total,
+        }
+
+    legacy_field_groups = [
+        (
+            "financials",
+            ["Invoice Total", "Pretax Total", "Tax Amount", "Currency"],
+        ),
+        ("vendor", ["Vendor Name", "Tax ID"]),
+        ("header", ["Vendor Invoice", "Invoice Date"]),
+    ]
+    for section_key, fields in legacy_field_groups:
+        for field in fields:
+            correct = sum(
+                1
+                for r in evaluated
+                if r.get(section_key, {}).get(field, {}).get("match", True)
+            )
+            field_stats[field] = {
+                "correct": correct,
+                "total": total,
+                "accuracy": correct / total,
+            }
+
+    return group_accuracy, field_stats
+
+
+def _compute_llm_stats(evaluated: list[dict]) -> dict | None:
+    """Compute LLM alignment statistics from evaluation results."""
+    llm_results = [
+        r
+        for r in evaluated
+        if r.get("llm_verdict") and r["llm_verdict"].get("verdict") != "ERROR"
+    ]
+    if not llm_results:
+        return None
+
+    verdict_counts = {"ALIGNED": 0, "PARTIALLY_ALIGNED": 0, "NOT_ALIGNED": 0}
+    for r in llm_results:
+        v = r["llm_verdict"]["verdict"]
+        if v in verdict_counts:
+            verdict_counts[v] += 1
+    llm_total = len(llm_results)
+    return {
+        "total_judged": llm_total,
+        "aligned": verdict_counts["ALIGNED"],
+        "partially_aligned": verdict_counts["PARTIALLY_ALIGNED"],
+        "not_aligned": verdict_counts["NOT_ALIGNED"],
+        "alignment_rate": verdict_counts["ALIGNED"] / llm_total,
+        "partial_or_better_rate": (
+            verdict_counts["ALIGNED"] + verdict_counts["PARTIALLY_ALIGNED"]
+        )
+        / llm_total,
+    }
+
+
 def compute_aggregate_stats(
-    results: List[dict], master: Optional[MasterData] = None
+    results: list[dict], master: MasterData | None = None
 ) -> dict:
     """Compute aggregate statistics across all evaluated cases.
 
@@ -802,128 +1038,19 @@ def compute_aggregate_stats(
     total = len(evaluated)
     passed = sum(1 for r in evaluated if r["all_correct"])
 
-    # Decision accuracy
     decision_correct = sum(1 for r in evaluated if r["decision"]["match"])
-    decision_matrix = {"TP": 0, "FP": 0, "FN": 0, "TN": 0}
-    for r in evaluated:
-        gt_d = r["decision"]["ground_truth_decision"]
-        ag_d = r["decision"]["agent_decision"]
-        if gt_d == "ACCEPT" and ag_d == "ACCEPT":
-            decision_matrix["TP"] += 1
-        elif gt_d == "REJECT" and ag_d == "REJECT":
-            decision_matrix["TN"] += 1
-        elif gt_d == "REJECT" and ag_d == "ACCEPT":
-            decision_matrix["FP"] += 1
-        elif gt_d == "ACCEPT" and ag_d == "REJECT":
-            decision_matrix["FN"] += 1
-
-    # Group-level and field-level accuracy — schema-driven or legacy
-    group_accuracy = {}
-    field_stats = {}
+    decision_matrix = _compute_decision_matrix(evaluated)
 
     if master:
-        for group in master.get_eval_comparison_groups():
-            group_id = group.get("id", "")
-            group_display = group.get("display_name", group_id)
-            group_type = group.get("type", "")
-
-            # Group-level accuracy
-            correct = sum(
-                1 for r in evaluated if r.get(group_id, {}).get("all_match", True)
-            )
-            group_accuracy[group_id] = {
-                "display_name": group_display,
-                "correct": correct,
-                "total": total,
-                "accuracy": correct / total,
-            }
-
-            # Per-field accuracy (for non-array groups)
-            if group_type != "array":
-                for field in group.get("fields", []):
-                    fname = field["name"]
-                    fc = sum(
-                        1
-                        for r in evaluated
-                        if r.get(group_id, {}).get(fname, {}).get("match", True)
-                    )
-                    field_stats[fname] = {
-                        "correct": fc,
-                        "total": total,
-                        "accuracy": fc / total,
-                    }
+        group_accuracy, field_stats = _compute_group_and_field_stats_schema(
+            evaluated, master, total
+        )
     else:
-        # Legacy fallback
-        for group_key in ["financials", "vendor", "header", "line_items"]:
-            correct = sum(
-                1 for r in evaluated if r.get(group_key, {}).get("all_match", True)
-            )
-            group_accuracy[group_key] = {
-                "display_name": group_key.replace("_", " ").title(),
-                "correct": correct,
-                "total": total,
-                "accuracy": correct / total,
-            }
+        group_accuracy, field_stats = _compute_group_and_field_stats_legacy(
+            evaluated, total
+        )
 
-        for field in ["Invoice Total", "Pretax Total", "Tax Amount", "Currency"]:
-            correct = sum(
-                1
-                for r in evaluated
-                if r.get("financials", {}).get(field, {}).get("match", True)
-            )
-            field_stats[field] = {
-                "correct": correct,
-                "total": total,
-                "accuracy": correct / total,
-            }
-        for field in ["Vendor Name", "Tax ID"]:
-            correct = sum(
-                1
-                for r in evaluated
-                if r.get("vendor", {}).get(field, {}).get("match", True)
-            )
-            field_stats[field] = {
-                "correct": correct,
-                "total": total,
-                "accuracy": correct / total,
-            }
-        for field in ["Vendor Invoice", "Invoice Date"]:
-            correct = sum(
-                1
-                for r in evaluated
-                if r.get("header", {}).get(field, {}).get("match", True)
-            )
-            field_stats[field] = {
-                "correct": correct,
-                "total": total,
-                "accuracy": correct / total,
-            }
-
-    # LLM alignment stats
-    llm_stats = None
-    llm_results = [
-        r
-        for r in evaluated
-        if r.get("llm_verdict") and r["llm_verdict"].get("verdict") != "ERROR"
-    ]
-    if llm_results:
-        verdict_counts = {"ALIGNED": 0, "PARTIALLY_ALIGNED": 0, "NOT_ALIGNED": 0}
-        for r in llm_results:
-            v = r["llm_verdict"]["verdict"]
-            if v in verdict_counts:
-                verdict_counts[v] += 1
-        llm_total = len(llm_results)
-        llm_stats = {
-            "total_judged": llm_total,
-            "aligned": verdict_counts["ALIGNED"],
-            "partially_aligned": verdict_counts["PARTIALLY_ALIGNED"],
-            "not_aligned": verdict_counts["NOT_ALIGNED"],
-            "alignment_rate": verdict_counts["ALIGNED"] / llm_total,
-            "partial_or_better_rate": (
-                verdict_counts["ALIGNED"] + verdict_counts["PARTIALLY_ALIGNED"]
-            )
-            / llm_total,
-        }
+    llm_stats = _compute_llm_stats(evaluated)
 
     return {
         "total": len(results),
@@ -940,23 +1067,8 @@ def compute_aggregate_stats(
     }
 
 
-def print_report(stats: dict, results: List[dict]) -> None:
-    """Print evaluation report to console."""
-    print()
-    print("=" * 70)
-    print("EVALUATION REPORT")
-    print("=" * 70)
-
-    if stats["evaluated"] == 0:
-        print(f"\nNo cases evaluated. {stats['errors']} error(s).")
-        return
-
-    total = stats["evaluated"]
-
-    print(f"\n  Cases:    {stats['evaluated']} evaluated, {stats['errors']} errors")
-    print(f"  Passed:   {stats['passed']}/{total} ({stats['pass_rate']:.1%})")
-    print(f"  Failed:   {stats['failed']}/{total}")
-
+def _print_decision_stats(stats: dict) -> None:
+    """Print decision accuracy and confusion matrix metrics."""
     print(f"\n  DECISION ACCURACY: {stats['decision_accuracy']:.1%}")
     dm = stats["decision_matrix"]
     print(f"    TP={dm['TP']}  FP={dm['FP']}  FN={dm['FN']}  TN={dm['TN']}")
@@ -974,19 +1086,19 @@ def print_report(stats: dict, results: List[dict]) -> None:
         )
         print(f"    F1 Score:  {f1:.3f}")
 
-    # Group accuracy — schema-driven
+
+def _print_group_and_field_accuracy(stats: dict) -> None:
+    """Print group-level and field-level accuracy sections."""
     group_acc = stats.get("group_accuracy", {})
     if group_acc:
         print("\n  GROUP ACCURACY:")
         for group_id, gstat in group_acc.items():
             display = gstat.get("display_name", group_id)
             print(f"    {display:24s} {gstat['accuracy']:.1%}")
-    else:
-        # Legacy fallback keys
-        if "financial_accuracy" in stats:
-            print(f"\n  FINANCIAL ACCURACY: {stats['financial_accuracy']:.1%}")
-            print(f"  VENDOR ACCURACY:    {stats['vendor_accuracy']:.1%}")
-            print(f"  LINE ITEM ACCURACY: {stats['line_item_accuracy']:.1%}")
+    elif "financial_accuracy" in stats:
+        print(f"\n  FINANCIAL ACCURACY: {stats['financial_accuracy']:.1%}")
+        print(f"  VENDOR ACCURACY:    {stats['vendor_accuracy']:.1%}")
+        print(f"  LINE ITEM ACCURACY: {stats['line_item_accuracy']:.1%}")
 
     print("\n  FIELD-LEVEL ACCURACY:")
     for field, fstat in stats["field_stats"].items():
@@ -995,7 +1107,9 @@ def print_report(stats: dict, results: List[dict]) -> None:
             f"    {field:20s} {fstat['correct']:3d}/{fstat['total']:3d}  {fstat['accuracy']:.1%}  {bar}"
         )
 
-    # LLM alignment
+
+def _print_llm_and_case_details(stats: dict, results: list[dict]) -> None:
+    """Print LLM alignment stats, failed cases, and error cases."""
     llm = stats.get("llm_alignment")
     if llm:
         print("\n  LLM ALIGNMENT (Gemini judge):")
@@ -1003,11 +1117,12 @@ def print_report(stats: dict, results: List[dict]) -> None:
         print(
             f"    PARTIALLY_ALIGNED: {llm['partially_aligned']}/{llm['total_judged']}"
         )
-        print(f"    NOT_ALIGNED:       {llm['not_aligned']}/{llm['total_judged']}")
+        print(
+            f"    NOT_ALIGNED:       {llm['not_aligned']}/{llm['total_judged']}"
+        )
         print(f"    Alignment rate:    {llm['alignment_rate']:.1%}")
         print(f"    Partial+ rate:     {llm['partial_or_better_rate']:.1%}")
 
-        # Show NOT_ALIGNED cases with reasons
         not_aligned = [
             r
             for r in results
@@ -1019,7 +1134,6 @@ def print_report(stats: dict, results: List[dict]) -> None:
                 reason = r["llm_verdict"].get("reason", "")
                 print(f"      {r['case_id']}: {reason}")
 
-    # Show failed cases
     failed = [r for r in results if r.get("status") == "FAIL"]
     if failed:
         print("\n  FAILED CASES:")
@@ -1028,12 +1142,35 @@ def print_report(stats: dict, results: List[dict]) -> None:
             for m in r["mismatches"]:
                 print(f"      - {m}")
 
-    # Show error cases
     error_cases = [r for r in results if r.get("status") == "ERROR"]
     if error_cases:
         print("\n  ERROR CASES:")
         for r in error_cases:
             print(f"    {r['case_id']}: {r.get('error', 'Unknown error')}")
+
+
+def print_report(stats: dict, results: list[dict]) -> None:
+    """Print evaluation report to console."""
+    print()
+    print("=" * 70)
+    print("EVALUATION REPORT")
+    print("=" * 70)
+
+    if stats["evaluated"] == 0:
+        print(f"\nNo cases evaluated. {stats['errors']} error(s).")
+        return
+
+    total = stats["evaluated"]
+
+    print(
+        f"\n  Cases:    {stats['evaluated']} evaluated, {stats['errors']} errors"
+    )
+    print(f"  Passed:   {stats['passed']}/{total} ({stats['pass_rate']:.1%})")
+    print(f"  Failed:   {stats['failed']}/{total}")
+
+    _print_decision_stats(stats)
+    _print_group_and_field_accuracy(stats)
+    _print_llm_and_case_details(stats, results)
 
     print()
     print("=" * 70)
@@ -1044,7 +1181,8 @@ def print_report(stats: dict, results: List[dict]) -> None:
 # ============================================================================
 
 
-def main():
+def _parse_args() -> argparse.Namespace:
+    """Parse and return command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Schema-driven evaluation of document processing agents against ground truth"
     )
@@ -1102,27 +1240,32 @@ def main():
         action="store_true",
         help="Skip LLM alignment evaluation (deterministic only, no cost)",
     )
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
-    # Load master data (schema-driven evaluation)
-    master = None
+def _load_master(master_data_path: str | None) -> MasterData | None:
+    """Load master data, returning None with a warning on failure."""
     try:
-        master = load_master_data(args.master_data)
+        return load_master_data(master_data_path)
     except FileNotFoundError:
-        print("  Warning: Master data file not found. Using legacy comparators.")
+        print(
+            "  Warning: Master data file not found. Using legacy comparators."
+        )
     except Exception as e:
-        print(f"  Warning: Failed to load master data ({e}). Using legacy comparators.")
+        print(
+            f"  Warning: Failed to load master data ({e}). Using legacy comparators."
+        )
+    return None
 
-    # Resolve paths relative to project root
-    # PROJECT_ROOT already set at module level
+
+def _resolve_directories(args: argparse.Namespace) -> tuple:
+    """Resolve and validate ground truth and agent output directories."""
     gt_dir = Path(args.ground_truth)
     if not gt_dir.is_absolute():
         gt_dir = PROJECT_ROOT / gt_dir
 
     agent_dir = Path(args.agent_output)
     if not agent_dir.is_absolute():
-        # Try relative to project root first, then script dir
         if (PROJECT_ROOT / agent_dir).exists():
             agent_dir = PROJECT_ROOT / agent_dir
         else:
@@ -1135,24 +1278,32 @@ def main():
         print(f"Error: Agent output directory not found: {agent_dir}")
         sys.exit(1)
 
-    # Collect cases
+    return gt_dir, agent_dir
+
+
+def _collect_case_ids(
+    args: argparse.Namespace, gt_dir: Path, agent_dir: Path
+) -> list[str]:
+    """Collect and return the list of case IDs to evaluate."""
     if args.case:
         case_ids = [args.case]
     else:
-        # Find cases that exist in BOTH directories
         gt_cases = {d.name for d in gt_dir.iterdir() if d.is_dir()}
         agent_cases = {d.name for d in agent_dir.iterdir() if d.is_dir()}
         common = sorted(gt_cases & agent_cases)
 
         if not common:
-            # Show what's available to help debug
             print("No matching case folders found between:")
             print(f"  Ground truth: {gt_dir} ({len(gt_cases)} folders)")
             print(f"  Agent output: {agent_dir} ({len(agent_cases)} folders)")
             if gt_cases - agent_cases:
-                print(f"  In ground truth only: {sorted(gt_cases - agent_cases)[:5]}")
+                print(
+                    f"  In ground truth only: {sorted(gt_cases - agent_cases)[:5]}"
+                )
             if agent_cases - gt_cases:
-                print(f"  In agent output only: {sorted(agent_cases - gt_cases)[:5]}")
+                print(
+                    f"  In agent output only: {sorted(agent_cases - gt_cases)[:5]}"
+                )
             sys.exit(1)
 
         case_ids = common
@@ -1160,30 +1311,18 @@ def main():
     if args.num_cases > 0:
         case_ids = case_ids[: args.num_cases]
 
-    # Initialize LLM if needed
-    llm_model = None
-    if not args.skip_llm:
-        llm_model = _init_llm()
-        if llm_model is None:
-            print(
-                "\n  Warning: LLM unavailable (missing packages or PROJECT_ID). "
-                "Running deterministic only."
-            )
-            print("  Install: pip install google-cloud-aiplatform python-dotenv")
+    return case_ids
 
-    domain_name = master.display_name if master else "Invoice Processing"
-    print("=" * 70)
-    print(f"{domain_name.upper()} AGENT EVALUATION")
-    print("=" * 70)
-    print(f"  Ground truth: {gt_dir}")
-    print(f"  Agent output: {agent_dir}")
-    if master:
-        print(f"  Master data:  {master.source_path}")
-    print(f"  Cases:        {len(case_ids)}")
-    print(f"  Tolerance:    ${args.tolerance}")
-    print(f"  LLM judge:    {'enabled' if llm_model else 'disabled'}")
 
-    # Evaluate each case
+def _run_evaluation_loop(
+    case_ids: list[str],
+    gt_dir: Path,
+    agent_dir: Path,
+    tolerance: float,
+    llm_model: Any | None,
+    master: MasterData | None,
+) -> list[dict]:
+    """Run evaluation on each case and return the list of results."""
     results = []
     for idx, case_id in enumerate(case_ids, 1):
         gt_file = gt_dir / case_id / "Postprocessing_Data.json"
@@ -1197,7 +1336,9 @@ def main():
                     "error": "Ground truth file not found",
                 }
             )
-            print(f"  [{idx}/{len(case_ids)}] {case_id}: ERROR (no ground truth)")
+            print(
+                f"  [{idx}/{len(case_ids)}] {case_id}: ERROR (no ground truth)"
+            )
             continue
         if not agent_file.exists():
             results.append(
@@ -1207,11 +1348,13 @@ def main():
                     "error": "Agent output file not found",
                 }
             )
-            print(f"  [{idx}/{len(case_ids)}] {case_id}: ERROR (no agent output)")
+            print(
+                f"  [{idx}/{len(case_ids)}] {case_id}: ERROR (no agent output)"
+            )
             continue
 
         result = evaluate_case(
-            case_id, gt_file, agent_file, args.tolerance, llm_model, master
+            case_id, gt_file, agent_file, tolerance, llm_model, master
         )
         results.append(result)
 
@@ -1222,13 +1365,23 @@ def main():
         detail = ""
         if not result["all_correct"]:
             detail = f"  ({', '.join(result['mismatches'][:2])})"
-        print(f"  [{idx}/{len(case_ids)}] {case_id}: {status_icon}{llm_tag}{detail}")
+        print(
+            f"  [{idx}/{len(case_ids)}] {case_id}: {status_icon}{llm_tag}{detail}"
+        )
 
-    # Aggregate and report
-    stats = compute_aggregate_stats(results, master)
-    print_report(stats, results)
+    return results
 
-    # Save results
+
+def _save_results(
+    args: argparse.Namespace,
+    stats: dict,
+    results: list[dict],
+    gt_dir: Path,
+    agent_dir: Path,
+    llm_model: Any | None,
+    master: MasterData | None,
+) -> None:
+    """Save evaluation results to a JSON file."""
     if args.output:
         output_file = Path(args.output)
         output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1241,7 +1394,9 @@ def main():
         "timestamp": datetime.now().isoformat(),
         "config": {
             "domain": master.domain if master else "invoice_processing",
-            "display_name": master.display_name if master else "Invoice Processing",
+            "display_name": master.display_name
+            if master
+            else "Invoice Processing",
             "master_data": str(master.source_path)
             if master and master.source_path
             else None,
@@ -1258,6 +1413,50 @@ def main():
         json.dump(output_json, f, indent=2, ensure_ascii=False)
 
     print(f"Results saved to: {output_file}")
+
+
+def main():
+    args = _parse_args()
+
+    master = _load_master(args.master_data)
+
+    gt_dir, agent_dir = _resolve_directories(args)
+
+    case_ids = _collect_case_ids(args, gt_dir, agent_dir)
+
+    # Initialize LLM if needed
+    llm_model = None
+    if not args.skip_llm:
+        llm_model = _init_llm()
+        if llm_model is None:
+            print(
+                "\n  Warning: LLM unavailable (missing packages or PROJECT_ID). "
+                "Running deterministic only."
+            )
+            print(
+                "  Install: pip install google-cloud-aiplatform python-dotenv"
+            )
+
+    domain_name = master.display_name if master else "Invoice Processing"
+    print("=" * 70)
+    print(f"{domain_name.upper()} AGENT EVALUATION")
+    print("=" * 70)
+    print(f"  Ground truth: {gt_dir}")
+    print(f"  Agent output: {agent_dir}")
+    if master:
+        print(f"  Master data:  {master.source_path}")
+    print(f"  Cases:        {len(case_ids)}")
+    print(f"  Tolerance:    ${args.tolerance}")
+    print(f"  LLM judge:    {'enabled' if llm_model else 'disabled'}")
+
+    results = _run_evaluation_loop(
+        case_ids, gt_dir, agent_dir, args.tolerance, llm_model, master
+    )
+
+    stats = compute_aggregate_stats(results, master)
+    print_report(stats, results)
+
+    _save_results(args, stats, results, gt_dir, agent_dir, llm_model, master)
 
 
 if __name__ == "__main__":

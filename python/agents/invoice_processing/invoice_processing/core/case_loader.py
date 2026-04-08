@@ -11,10 +11,8 @@ ADK-transferable: single run() entry point, structured I/O.
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from .config import AGENTIC_FLOW_OUT, ALF_OUT_DIR, ARTIFACT_MAP
-
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -28,9 +26,11 @@ class CaseData:
     case_id: str
     artifacts: dict = field(default_factory=dict)  # key -> parsed JSON
     context: dict = field(default_factory=dict)  # flattened ALF-style context
-    postprocessing: dict = field(default_factory=dict)  # Postprocessing_Data.json
-    alf_audit: Optional[dict] = None  # ALF audit log if exists
-    alf_postprocessing: Optional[dict] = None  # ALF revised output if exists
+    postprocessing: dict = field(
+        default_factory=dict
+    )  # Postprocessing_Data.json
+    alf_audit: dict | None = None  # ALF audit log if exists
+    alf_postprocessing: dict | None = None  # ALF revised output if exists
     summary: str = ""  # human-readable summary
 
 
@@ -85,7 +85,7 @@ class CaseLoaderAgent:
             filepath = case_dir / filename
             if filepath.exists():
                 try:
-                    with open(filepath, "r", encoding="utf-8") as f:
+                    with open(filepath, encoding="utf-8") as f:
                         data.artifacts[key] = json.load(f)
                 except json.JSONDecodeError:
                     data.artifacts[key] = {}
@@ -101,10 +101,10 @@ class CaseLoaderAgent:
             alf_audit_path = alf_case_dir / "alf_audit_log.json"
             alf_pp_path = alf_case_dir / "Postprocessing_Data.json"
             if alf_audit_path.exists():
-                with open(alf_audit_path, "r") as f:
+                with open(alf_audit_path) as f:
                     data.alf_audit = json.load(f)
             if alf_pp_path.exists():
-                with open(alf_pp_path, "r") as f:
+                with open(alf_pp_path) as f:
                     data.alf_postprocessing = json.load(f)
 
         # --- Build human summary ---
@@ -112,28 +112,8 @@ class CaseLoaderAgent:
 
         return data
 
-    def _build_context(self, artifacts: dict, case_dir: Path) -> dict:
-        """
-        Build flattened context matching ALF ActingAgentAdapter.build_case_context().
-
-        This is the critical function - field paths must match exactly
-        so ConditionEvaluator produces identical results.
-        """
-        context = {}
-
-        # Copy all raw artifacts into context under their key
-        for key, artifact in artifacts.items():
-            context[key] = artifact
-
-        # --- Flatten extraction fields to top level ---
-        ext = artifacts.get("extraction", {})
-        if ext:
-            context["invoice"] = ext.get("invoice", {})
-            context["work_authorization"] = ext.get("work_authorization", {})
-            context["has_waf"] = ext.get("waf_count", 0) > 0
-            context["waf_count"] = ext.get("waf_count", 0)
-
-        # --- Flatten phase decisions ---
+    def _flatten_phase_decisions(self, artifacts: dict, context: dict) -> None:
+        """Flatten phase decisions and related fields into the context dict."""
         phase1 = artifacts.get("phase1", {})
         if phase1:
             context["decision_phase1"] = phase1.get("decision")
@@ -159,21 +139,46 @@ class CaseLoaderAgent:
 
         transformer = artifacts.get("transformer", {})
         if transformer:
-            context["line_items_mapped"] = transformer.get("line_items_mapped", [])
+            context["line_items_mapped"] = transformer.get(
+                "line_items_mapped", []
+            )
+
+    def _build_context(self, artifacts: dict, case_dir: Path) -> dict:
+        """
+        Build flattened context matching ALF ActingAgentAdapter.build_case_context().
+
+        This is the critical function - field paths must match exactly
+        so ConditionEvaluator produces identical results.
+        """
+        context = {}
+
+        # Copy all raw artifacts into context under their key
+        for key, artifact in artifacts.items():
+            context[key] = artifact
+
+        # --- Flatten extraction fields to top level ---
+        ext = artifacts.get("extraction", {})
+        if ext:
+            context["invoice"] = ext.get("invoice", {})
+            context["work_authorization"] = ext.get("work_authorization", {})
+            context["has_waf"] = ext.get("waf_count", 0) > 0
+            context["waf_count"] = ext.get("waf_count", 0)
+
+        # --- Flatten phase decisions ---
+        self._flatten_phase_decisions(artifacts, context)
 
         return context
 
-    def _build_summary(self, data: CaseData) -> str:
-        """Build a human-readable case summary for the SME."""
-        ctx = data.context
+    def _build_summary_decision(self, data: CaseData, lines: list) -> str:
+        """Append decision and rejection info to summary lines.
+
+        Returns:
+            outcome_msg for later use.
+        """
         pp = data.postprocessing
-        lines = []
-
-        # Header
-        lines.append(f"=== Case {data.case_id} ===")
-
-        # Decision
-        inv_status = pp.get("Invoice Processing", {}).get("Invoice Status", "Unknown")
+        inv_status = pp.get("Invoice Processing", {}).get(
+            "Invoice Status", "Unknown"
+        )
         outcome_msg = pp.get("Outcome Message", {}).get("Outcome Message", "")
         lines.append(f"Decision: {inv_status}")
 
@@ -183,7 +188,11 @@ class CaseLoaderAgent:
         failing_step = ""
         for phase_key in ["phase1", "phase2", "phase3", "phase4"]:
             phase = data.artifacts.get(phase_key, {})
-            if phase.get("decision") in ("REJECT", "SET_ASIDE", "EMAIL_APPROVER"):
+            if phase.get("decision") in (
+                "REJECT",
+                "SET_ASIDE",
+                "EMAIL_APPROVER",
+            ):
                 failing_phase = phase.get("phase_name", phase_key)
                 rejection_reason = phase.get("rejection_template", "")
                 # Find specific failing step
@@ -203,9 +212,10 @@ class CaseLoaderAgent:
         if outcome_msg:
             lines.append(f"Outcome: {outcome_msg.strip()}")
 
-        lines.append("")
+        return outcome_msg
 
-        # Key details
+    def _build_summary_key_details(self, ctx: dict, lines: list) -> None:
+        """Append key invoice details to summary lines."""
         lines.append("Key details:")
         invoice = ctx.get("invoice", {})
 
@@ -241,11 +251,14 @@ class CaseLoaderAgent:
         line_items = invoice.get("line_items", [])
         if line_items:
             descs = [li.get("description", "?")[:40] for li in line_items[:5]]
-            lines.append(f"  Line items: {len(line_items)} ({', '.join(descs)})")
+            lines.append(
+                f"  Line items: {len(line_items)} ({', '.join(descs)})"
+            )
 
-        lines.append("")
-
-        # Phase-by-phase validation summary
+    def _build_summary_validation_phases(
+        self, data: CaseData, lines: list
+    ) -> None:
+        """Append phase-by-phase validation summary to lines."""
         lines.append("Validation phases:")
         for phase_key, label in [
             ("phase1", "Phase 1 (Intake)"),
@@ -260,10 +273,14 @@ class CaseLoaderAgent:
             decision = phase.get("decision", "?")
             validations = phase.get("validations", [])
             passed = sum(
-                1 for v in validations if isinstance(v, dict) and v.get("passed")
+                1
+                for v in validations
+                if isinstance(v, dict) and v.get("passed")
             )
             total = len(validations)
-            lines.append(f"  {label}: {decision} ({passed}/{total} steps passed)")
+            lines.append(
+                f"  {label}: {decision} ({passed}/{total} steps passed)"
+            )
             # Show failing steps
             for v in validations:
                 if isinstance(v, dict) and not v.get("passed", True):
@@ -274,9 +291,8 @@ class CaseLoaderAgent:
                     if tmpl:
                         lines.append(f"      Template: '{tmpl}'")
 
-        lines.append("")
-
-        # ALF status
+    def _build_summary_alf_status(self, data: CaseData, lines: list) -> None:
+        """Append ALF status section to summary lines."""
         if data.alf_audit:
             fired = data.alf_audit.get("any_rules_fired", False)
             matched = data.alf_audit.get("rules_matched", 0)
@@ -296,5 +312,28 @@ class CaseLoaderAgent:
                 lines.append("ALF status: No rules fired for this case")
         else:
             lines.append("ALF status: Not evaluated")
+
+    def _build_summary(self, data: CaseData) -> str:
+        """Build a human-readable case summary for the SME."""
+        ctx = data.context
+        lines = []
+
+        # Header
+        lines.append(f"=== Case {data.case_id} ===")
+
+        # Decision and rejection info
+        self._build_summary_decision(data, lines)
+        lines.append("")
+
+        # Key details
+        self._build_summary_key_details(ctx, lines)
+        lines.append("")
+
+        # Phase-by-phase validation summary
+        self._build_summary_validation_phases(data, lines)
+        lines.append("")
+
+        # ALF status
+        self._build_summary_alf_status(data, lines)
 
         return "\n".join(lines)

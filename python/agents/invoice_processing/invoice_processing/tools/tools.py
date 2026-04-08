@@ -5,9 +5,10 @@ Combines inference tools (case discovery, pipeline execution) and
 learning tools (case review, rule management, session logging).
 """
 
+import ast
+import json
 import re
 import sys
-import json
 from pathlib import Path
 
 # Resolve paths: tools.py -> tools/ -> invoice_processing/ (package root with data/ inside)
@@ -21,18 +22,17 @@ sys.path.insert(0, str(AGENT_ROOT))
 sys.path.insert(0, str(AGENT_PKG_DIR / "shared_libraries"))
 
 from ..core.case_loader import CaseLoaderAgent  # noqa: E402
+from ..core.config import RULES_BOOK_PATH  # noqa: E402
 from ..core.impact_assessor import ImpactAssessorAgent  # noqa: E402
-from ..core.rule_writer import RuleWriterAgent  # noqa: E402
-from ..core.session_logger import SessionLogger  # noqa: E402
 from ..core.prompts import (  # noqa: E402
     RULE_DISCOVERY_SYSTEM_PROMPT,
     RULE_DISCOVERY_TASK_TEMPLATE,
     RULE_REVISION_TASK_TEMPLATE,
     extract_relevant_rules_book_sections,
 )
-from ..core.config import RULES_BOOK_PATH  # noqa: E402
+from ..core.rule_writer import RuleWriterAgent  # noqa: E402
 from ..core.safe_rule_orchestrator import SafeRuleOrchestrator  # noqa: E402
-
+from ..core.session_logger import SessionLogger  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Module-level instances (singletons)
@@ -47,8 +47,6 @@ _orchestrator = SafeRuleOrchestrator()
 
 def _safe_json_loads(text) -> dict:
     """Parse JSON/dict input from LLM, handling all common formats."""
-    import ast
-
     # If already a dict/list (ADK may pass structured objects), return directly
     if isinstance(text, (dict, list)):
         return text
@@ -59,10 +57,10 @@ def _safe_json_loads(text) -> dict:
     if stripped.startswith("```"):
         lines = stripped.split("\n")
         # Remove first line (```json) and last line (```)
-        lines = [line for line in lines[1:] if not line.strip().startswith("```")]
+        lines = [
+            line for line in lines[1:] if not line.strip().startswith("```")
+        ]
         stripped = "\n".join(lines).strip()
-    else:
-        stripped = stripped
     # Try direct JSON parse
     try:
         return json.loads(stripped)
@@ -92,7 +90,9 @@ def _safe_json_loads(text) -> dict:
         f"[_safe_json_loads] FAILED to parse (type={type(text).__name__}, "
         f"len={len(text)}, first 200 chars): {text[:200]!r}"
     )
-    raise ValueError(f"Could not parse input as JSON. Received: {text[:100]}...")
+    raise ValueError(
+        f"Could not parse input as JSON. Received: {text[:100]}..."
+    )
 
 
 # ===========================================================================
@@ -352,7 +352,9 @@ def build_rule_discovery_context(case_id: str, sme_feedback: str) -> dict:
                 step = v.get("step", v.get("step_name", ""))
                 validation_details += f"  Step {step}: {status}\n"
                 if v.get("rejection_template"):
-                    validation_details += f"    Template: {v['rejection_template']}\n"
+                    validation_details += (
+                        f"    Template: {v['rejection_template']}\n"
+                    )
 
     invoice_json = json.dumps(
         case_data.context.get("invoice", {}), indent=2, default=str
@@ -374,9 +376,9 @@ def build_rule_discovery_context(case_id: str, sme_feedback: str) -> dict:
             validation_details=validation_details[:2000],
             invoice_json=invoice_json,
             extraction_json=extraction_json,
-            existing_rules_json=json.dumps(existing_rules, indent=2, default=str)[
-                :4000
-            ],
+            existing_rules_json=json.dumps(
+                existing_rules, indent=2, default=str
+            )[:4000],
             existing_scopes=json.dumps(existing_scopes, indent=2),
             rules_book_context=rules_book_context[:4000],
             next_rule_id=next_rule_id,
@@ -394,7 +396,10 @@ def build_rule_discovery_context(case_id: str, sme_feedback: str) -> dict:
 
 
 def build_rule_revision_context(
-    case_id: str, current_rule_json: str, revision_feedback: str, impact_summary: str
+    case_id: str,
+    current_rule_json: str,
+    revision_feedback: str,
+    impact_summary: str,
 ) -> dict:
     """Build context for LLM rule revision.
 
@@ -470,7 +475,9 @@ def discover_safe_rule(case_id: str, sme_feedback: str) -> dict:
     return result
 
 
-def revise_safe_rule(case_id: str, current_rule_json: str, sme_feedback: str) -> dict:
+def revise_safe_rule(
+    case_id: str, current_rule_json: str, sme_feedback: str
+) -> dict:
     """Revise a proposed rule based on SME feedback with automatic safety validation.
 
     Takes the SME's revision feedback, revises the rule via LLM, then runs

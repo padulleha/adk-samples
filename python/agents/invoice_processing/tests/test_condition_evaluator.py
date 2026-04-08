@@ -2,15 +2,21 @@
 
 import sys
 from pathlib import Path
-
+from typing import ClassVar
 
 # Add parent package to path so imports work without installing
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "invoice_processing"))
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)
 
-from shared_libraries.alf_engine import (
+from invoice_processing.shared_libraries.alf_engine import (
     ConditionEvaluator,
 )
 
+_TEST_VALUE = 42
+_TEST_ARRAY_VALUE = 10
+_TEST_SECOND_ARRAY_VALUE = 20
+_EXPECTED_CONDITION_COUNT = 2
 
 # ---------------------------------------------------------------------------
 # resolve_field
@@ -22,8 +28,8 @@ class TestResolveField:
         assert ConditionEvaluator.resolve_field({"a": 1}, "a") == 1
 
     def test_nested_key(self):
-        data = {"a": {"b": {"c": 42}}}
-        assert ConditionEvaluator.resolve_field(data, "a.b.c") == 42
+        data = {"a": {"b": {"c": _TEST_VALUE}}}
+        assert ConditionEvaluator.resolve_field(data, "a.b.c") == _TEST_VALUE
 
     def test_missing_key_returns_none(self):
         assert ConditionEvaluator.resolve_field({"a": 1}, "b") is None
@@ -32,9 +38,17 @@ class TestResolveField:
         assert ConditionEvaluator.resolve_field({"a": {"b": 1}}, "a.x") is None
 
     def test_array_index(self):
-        data = {"items": [{"x": 10}, {"x": 20}]}
-        assert ConditionEvaluator.resolve_field(data, "items.0.x") == 10
-        assert ConditionEvaluator.resolve_field(data, "items.1.x") == 20
+        data = {
+            "items": [{"x": _TEST_ARRAY_VALUE}, {"x": _TEST_SECOND_ARRAY_VALUE}]
+        }
+        assert (
+            ConditionEvaluator.resolve_field(data, "items.0.x")
+            == _TEST_ARRAY_VALUE
+        )
+        assert (
+            ConditionEvaluator.resolve_field(data, "items.1.x")
+            == _TEST_SECOND_ARRAY_VALUE
+        )
 
     def test_array_index_out_of_bounds(self):
         data = {"items": [1]}
@@ -63,7 +77,10 @@ class TestResolveDynamicValue:
         assert result == "hello"
 
     def test_non_string_unchanged(self):
-        assert ConditionEvaluator._resolve_dynamic_value(42, {}) == 42
+        assert (
+            ConditionEvaluator._resolve_dynamic_value(_TEST_VALUE, {})
+            == _TEST_VALUE
+        )
         assert ConditionEvaluator._resolve_dynamic_value(None, {}) is None
 
     def test_dynamic_resolved(self):
@@ -94,28 +111,43 @@ class TestApplyOperator:
         assert ConditionEvaluator._apply_operator("is_null", "x", None) is False
 
     def test_is_not_null_true(self):
-        assert ConditionEvaluator._apply_operator("is_not_null", "x", None) is True
+        assert (
+            ConditionEvaluator._apply_operator("is_not_null", "x", None) is True
+        )
 
     def test_is_not_null_false(self):
-        assert ConditionEvaluator._apply_operator("is_not_null", None, None) is False
+        assert (
+            ConditionEvaluator._apply_operator("is_not_null", None, None)
+            is False
+        )
 
     # -- Boolean checks --
     def test_is_true(self):
         assert ConditionEvaluator._apply_operator("is_true", True, None) is True
         assert ConditionEvaluator._apply_operator("is_true", 1, None) is True
-        assert ConditionEvaluator._apply_operator("is_true", "yes", None) is True
+        assert (
+            ConditionEvaluator._apply_operator("is_true", "yes", None) is True
+        )
 
     def test_is_false(self):
-        assert ConditionEvaluator._apply_operator("is_false", False, None) is True
+        assert (
+            ConditionEvaluator._apply_operator("is_false", False, None) is True
+        )
         assert ConditionEvaluator._apply_operator("is_false", 0, None) is True
         assert ConditionEvaluator._apply_operator("is_false", "", None) is True
-        assert ConditionEvaluator._apply_operator("is_false", None, None) is True
+        assert (
+            ConditionEvaluator._apply_operator("is_false", None, None) is True
+        )
 
     # -- Equals --
     def test_equals_string_case_insensitive(self):
-        assert ConditionEvaluator._apply_operator("equals", "REJECT", "reject") is True
         assert (
-            ConditionEvaluator._apply_operator("equals", " Accept ", "accept") is True
+            ConditionEvaluator._apply_operator("equals", "REJECT", "reject")
+            is True
+        )
+        assert (
+            ConditionEvaluator._apply_operator("equals", " Accept ", "accept")
+            is True
         )
 
     def test_equals_numeric(self):
@@ -123,8 +155,12 @@ class TestApplyOperator:
         assert ConditionEvaluator._apply_operator("equals", 42, 43) is False
 
     def test_not_equals(self):
-        assert ConditionEvaluator._apply_operator("not_equals", "a", "b") is True
-        assert ConditionEvaluator._apply_operator("not_equals", "a", "a") is False
+        assert (
+            ConditionEvaluator._apply_operator("not_equals", "a", "b") is True
+        )
+        assert (
+            ConditionEvaluator._apply_operator("not_equals", "a", "a") is False
+        )
 
     # -- Contains --
     def test_contains(self):
@@ -135,7 +171,8 @@ class TestApplyOperator:
             is True
         )
         assert (
-            ConditionEvaluator._apply_operator("contains", "all good", "error") is False
+            ConditionEvaluator._apply_operator("contains", "all good", "error")
+            is False
         )
 
     def test_contains_case_insensitive(self):
@@ -147,34 +184,50 @@ class TestApplyOperator:
         )
 
     def test_contains_none_actual(self):
-        assert ConditionEvaluator._apply_operator("contains", None, "x") is False
+        assert (
+            ConditionEvaluator._apply_operator("contains", None, "x") is False
+        )
 
     def test_not_contains(self):
         assert (
-            ConditionEvaluator._apply_operator("not_contains", "hello world", "error")
+            ConditionEvaluator._apply_operator(
+                "not_contains", "hello world", "error"
+            )
             is True
         )
         assert (
-            ConditionEvaluator._apply_operator("not_contains", "has error", "error")
+            ConditionEvaluator._apply_operator(
+                "not_contains", "has error", "error"
+            )
             is False
         )
 
     def test_not_contains_none_actual(self):
-        assert ConditionEvaluator._apply_operator("not_contains", None, "x") is True
+        assert (
+            ConditionEvaluator._apply_operator("not_contains", None, "x")
+            is True
+        )
 
     # -- Starts with --
     def test_starts_with(self):
         assert (
-            ConditionEvaluator._apply_operator("starts_with", "ACME Corp", "acme")
+            ConditionEvaluator._apply_operator(
+                "starts_with", "ACME Corp", "acme"
+            )
             is True
         )
         assert (
-            ConditionEvaluator._apply_operator("starts_with", "Global Ltd", "acme")
+            ConditionEvaluator._apply_operator(
+                "starts_with", "Global Ltd", "acme"
+            )
             is False
         )
 
     def test_starts_with_none(self):
-        assert ConditionEvaluator._apply_operator("starts_with", None, "x") is False
+        assert (
+            ConditionEvaluator._apply_operator("starts_with", None, "x")
+            is False
+        )
 
     # -- In list --
     def test_in_list(self):
@@ -202,7 +255,10 @@ class TestApplyOperator:
         )
 
     def test_in_list_not_a_list(self):
-        assert ConditionEvaluator._apply_operator("in_list", "x", "not a list") is False
+        assert (
+            ConditionEvaluator._apply_operator("in_list", "x", "not a list")
+            is False
+        )
 
     def test_not_in_list(self):
         assert (
@@ -221,15 +277,21 @@ class TestApplyOperator:
     # -- Numeric comparisons --
     def test_greater_than(self):
         assert ConditionEvaluator._apply_operator("greater_than", 10, 5) is True
-        assert ConditionEvaluator._apply_operator("greater_than", 5, 10) is False
+        assert (
+            ConditionEvaluator._apply_operator("greater_than", 5, 10) is False
+        )
 
     def test_less_than(self):
         assert ConditionEvaluator._apply_operator("less_than", 3, 10) is True
         assert ConditionEvaluator._apply_operator("less_than", 10, 3) is False
 
     def test_greater_equal(self):
-        assert ConditionEvaluator._apply_operator("greater_equal", 10, 10) is True
-        assert ConditionEvaluator._apply_operator("greater_equal", 9, 10) is False
+        assert (
+            ConditionEvaluator._apply_operator("greater_equal", 10, 10) is True
+        )
+        assert (
+            ConditionEvaluator._apply_operator("greater_equal", 9, 10) is False
+        )
 
     def test_less_equal(self):
         assert ConditionEvaluator._apply_operator("less_equal", 10, 10) is True
@@ -237,12 +299,17 @@ class TestApplyOperator:
 
     def test_numeric_with_strings(self):
         assert (
-            ConditionEvaluator._apply_operator("greater_than", "100.50", "50.25")
+            ConditionEvaluator._apply_operator(
+                "greater_than", "100.50", "50.25"
+            )
             is True
         )
 
     def test_numeric_non_numeric_returns_false(self):
-        assert ConditionEvaluator._apply_operator("greater_than", "abc", 5) is False
+        assert (
+            ConditionEvaluator._apply_operator("greater_than", "abc", 5)
+            is False
+        )
 
     # -- Regex --
     def test_regex_match(self):
@@ -262,7 +329,10 @@ class TestApplyOperator:
         )
 
     def test_regex_none_actual(self):
-        assert ConditionEvaluator._apply_operator("regex_match", None, r".*") is False
+        assert (
+            ConditionEvaluator._apply_operator("regex_match", None, r".*")
+            is False
+        )
 
     # -- any_item_contains --
     def test_any_item_contains_dict_items(self):
@@ -271,24 +341,32 @@ class TestApplyOperator:
             {"description": "Labour charge", "amount": "200.00"},
         ]
         assert (
-            ConditionEvaluator._apply_operator("any_item_contains", items, "labour")
+            ConditionEvaluator._apply_operator(
+                "any_item_contains", items, "labour"
+            )
             is True
         )
         assert (
-            ConditionEvaluator._apply_operator("any_item_contains", items, "shipping")
+            ConditionEvaluator._apply_operator(
+                "any_item_contains", items, "shipping"
+            )
             is False
         )
 
     def test_any_item_contains_string_items(self):
         items = ["apple", "banana", "cherry"]
         assert (
-            ConditionEvaluator._apply_operator("any_item_contains", items, "ban")
+            ConditionEvaluator._apply_operator(
+                "any_item_contains", items, "ban"
+            )
             is True
         )
 
     def test_any_item_contains_not_a_list(self):
         assert (
-            ConditionEvaluator._apply_operator("any_item_contains", "not a list", "x")
+            ConditionEvaluator._apply_operator(
+                "any_item_contains", "not a list", "x"
+            )
             is False
         )
 
@@ -334,7 +412,9 @@ class TestApplyOperator:
 
     def test_first_word_equals_none(self):
         assert (
-            ConditionEvaluator._apply_operator("first_word_equals", None, "Acme")
+            ConditionEvaluator._apply_operator(
+                "first_word_equals", None, "Acme"
+            )
             is False
         )
 
@@ -348,21 +428,36 @@ class TestApplyOperator:
 
     # -- Length checks --
     def test_length_equals(self):
-        assert ConditionEvaluator._apply_operator("length_equals", [1, 2, 3], 3) is True
-        assert ConditionEvaluator._apply_operator("length_equals", [1, 2], 3) is False
+        assert (
+            ConditionEvaluator._apply_operator("length_equals", [1, 2, 3], 3)
+            is True
+        )
+        assert (
+            ConditionEvaluator._apply_operator("length_equals", [1, 2], 3)
+            is False
+        )
 
     def test_length_greater(self):
         assert (
-            ConditionEvaluator._apply_operator("length_greater", [1, 2, 3], 2) is True
+            ConditionEvaluator._apply_operator("length_greater", [1, 2, 3], 2)
+            is True
         )
-        assert ConditionEvaluator._apply_operator("length_greater", [1], 2) is False
+        assert (
+            ConditionEvaluator._apply_operator("length_greater", [1], 2)
+            is False
+        )
 
     def test_length_less(self):
         assert ConditionEvaluator._apply_operator("length_less", [1], 2) is True
-        assert ConditionEvaluator._apply_operator("length_less", [1, 2, 3], 2) is False
+        assert (
+            ConditionEvaluator._apply_operator("length_less", [1, 2, 3], 2)
+            is False
+        )
 
     def test_length_with_none(self):
-        assert ConditionEvaluator._apply_operator("length_equals", None, 0) is True
+        assert (
+            ConditionEvaluator._apply_operator("length_equals", None, 0) is True
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +477,9 @@ class TestEvaluateSingle:
 
     def test_unsupported_operator(self):
         condition = {"field": "x", "operator": "INVALID_OP", "value": "y"}
-        assert ConditionEvaluator.evaluate_single({"x": "y"}, condition) is False
+        assert (
+            ConditionEvaluator.evaluate_single({"x": "y"}, condition) is False
+        )
 
     def test_dynamic_value_in_condition(self):
         data = {"vendor": "Acme", "match_field": "Acme"}
@@ -408,7 +505,7 @@ class TestEvaluateAll:
         ]
         passed, details = ConditionEvaluator.evaluate_all(data, conditions)
         assert passed is True
-        assert len(details) == 2
+        assert len(details) == _EXPECTED_CONDITION_COUNT
         assert all(d["passed"] for d in details)
 
     def test_one_fails(self):
@@ -436,7 +533,7 @@ class TestEvaluateAll:
 class TestALF001Scenario:
     """Test the actual ALF-001 rule conditions from rule_base.json."""
 
-    ALF_001_CONDITIONS = [
+    ALF_001_CONDITIONS: ClassVar[list[dict[str, str]]] = [
         {
             "field": "decision_phase1",
             "operator": "equals",
@@ -458,10 +555,14 @@ class TestALF001Scenario:
         """case_004: Acme Pty Ltd rejected for wrong customer -- should match."""
         data = {
             "decision_phase1": "REJECT",
-            "phase1": {"rejection_template": "Invoice addressed to different company"},
+            "phase1": {
+                "rejection_template": "Invoice addressed to different company"
+            },
             "invoice": {"customer_name": "Acme Pty Ltd"},
         }
-        passed, _ = ConditionEvaluator.evaluate_all(data, self.ALF_001_CONDITIONS)
+        passed, _ = ConditionEvaluator.evaluate_all(
+            data, self.ALF_001_CONDITIONS
+        )
         assert passed is True
 
     def test_case_001_no_match(self):
@@ -471,7 +572,9 @@ class TestALF001Scenario:
             "phase1": {"rejection_template": "GST calculation error"},
             "invoice": {"customer_name": "ACME Corp"},
         }
-        passed, _ = ConditionEvaluator.evaluate_all(data, self.ALF_001_CONDITIONS)
+        passed, _ = ConditionEvaluator.evaluate_all(
+            data, self.ALF_001_CONDITIONS
+        )
         assert passed is False
 
     def test_case_002_no_match(self):
@@ -481,5 +584,7 @@ class TestALF001Scenario:
             "phase1": {},
             "invoice": {"customer_name": "ACME Corp"},
         }
-        passed, _ = ConditionEvaluator.evaluate_all(data, self.ALF_001_CONDITIONS)
+        passed, _ = ConditionEvaluator.evaluate_all(
+            data, self.ALF_001_CONDITIONS
+        )
         assert passed is False

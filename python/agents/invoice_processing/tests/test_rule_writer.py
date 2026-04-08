@@ -6,10 +6,14 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent)
+)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "invoice_processing"))
+import invoice_processing.core.rule_writer as rw_module
+from invoice_processing.core.rule_writer import RuleWriterAgent
 
-from core.rule_writer import RuleWriterAgent
+_EXPECTED_RULE_COUNT = 2
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +154,9 @@ class TestCheckConflicts:
             ):
                 rule = {**VALID_RULE, "id": "ALF-001"}  # duplicate
                 with patch.object(
-                    agent, "get_existing_rules", return_value=SAMPLE_RULE_BASE["rules"]
+                    agent,
+                    "get_existing_rules",
+                    return_value=SAMPLE_RULE_BASE["rules"],
                 ):
                     warnings = agent.check_conflicts(rule)
         assert any("already exists" in w for w in warnings)
@@ -158,7 +164,11 @@ class TestCheckConflicts:
 
     def test_priority_collision_warning(self):
         agent = RuleWriterAgent()
-        rule = {**VALID_RULE, "scope": "customer_entity_validation", "priority": 50}
+        rule = {
+            **VALID_RULE,
+            "scope": "customer_entity_validation",
+            "priority": 50,
+        }
         with patch.object(
             agent, "get_existing_rules", return_value=SAMPLE_RULE_BASE["rules"]
         ):
@@ -272,8 +282,6 @@ class TestRunWriteRule:
     def test_add_rule_success(self):
         tmp_path = self._make_tmp_rule_base()
         try:
-            import core.rule_writer as rw_module
-
             original = rw_module.RULE_BASE_PATH
             rw_module.RULE_BASE_PATH = tmp_path
             try:
@@ -283,12 +291,12 @@ class TestRunWriteRule:
                 assert result.success is True
                 assert result.rule_id == "ALF-002"
                 assert result.mode == "add"
-                assert result.total_rules == 2
+                assert result.total_rules == _EXPECTED_RULE_COUNT
 
                 # Verify file contents
                 with open(tmp_path) as f:
                     saved = json.load(f)
-                assert len(saved["rules"]) == 2
+                assert len(saved["rules"]) == _EXPECTED_RULE_COUNT
                 assert saved["rules"][1]["id"] == "ALF-002"
             finally:
                 rw_module.RULE_BASE_PATH = original
@@ -298,8 +306,6 @@ class TestRunWriteRule:
     def test_add_duplicate_id_fails(self):
         tmp_path = self._make_tmp_rule_base()
         try:
-            import core.rule_writer as rw_module
-
             original = rw_module.RULE_BASE_PATH
             rw_module.RULE_BASE_PATH = tmp_path
             try:
