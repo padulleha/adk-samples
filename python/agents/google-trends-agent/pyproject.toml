@@ -23,8 +23,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest>=8.3.2",
+    "pytest-asyncio>=0.23.7",
+    "google-adk[eval]>=1.0.0",
+    "nest-asyncio>=1.6.0",
+    "agent-starter-pack>=0.32.0",
 ]
 deployment = [
     "absl-py>=2.2.2",
@@ -53,3 +56,13 @@ packages = ["google_trends_agent", "app"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.agent-starter-pack]
+example_question = "What's trending in AI Engineering today?"
+
+[tool.agent-starter-pack.settings]
+agent_directory = "google_trends_agent"

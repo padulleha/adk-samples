@@ -1,6 +1,6 @@
 # Brand-Aligned Presentations.
 
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Architecture:** Multi-Agent System on Vertex AI  
 **Model:** Gemini 2.5 Flash  
 
@@ -107,16 +107,17 @@ Ensure your service account (or user account) has the following permissions:
     ```
 
     **Required Variables:**
-    - `GOOGLE_CLOUD_PROJECT`: Your Project ID.
-    - `GOOGLE_CLOUD_LOCATION`: Region (e.g., `us-central1`).
-    - `GEMINI_MODEL_NAME`: e.g., `gemini-2.5-flash`.
-    - `IMAGE_GENERATION_MODEL`: e.g., `imagen-3.0-generate-002`.
-    - `GCP_STAGING_BUCKET`: Bucket name for artifacts (e.g., `gs://my-bucket`).
-    - `DEFAULT_TEMPLATE_URI`: URI of the master template (e.g., `gs://bucket/Proposal_Template.pptx`).
-    - `AS_APP`: Gemini Enterprise app ID.
-    - `DATASTORE_ID`: Vertex AI Search Datastore ID for internal RAG (Format: `projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection/dataStores/{DATA_STORE_ID}`).
-    - `ENABLE_RAG`: Set to ‘false’ by default; requires manual RAG database configuration by the user.
-    - `ENABLE_DEEP_RESEARCH`: Set to ‘false’ by default; requires project-level allowlisting before activation.
+    - `GOOGLE_CLOUD_PROJECT`: Your Google Cloud Project ID.
+    - `GOOGLE_CLOUD_LOCATION`: The target region (e.g., `us-central1`).
+    - `GEMINI_MODEL_NAME`: The spefcific LLM version to use (e.g., `gemini-2.5-flash`).
+    - `IMAGE_GENERATION_MODEL`:The Imagen model version (e.g., `imagen-3.0-generate-002`).
+    - `GCP_STAGING_BUCKET`: GCS Bucket name for storing artifacts (e.g., `gs://my-bucket`).
+    - `DEFAULT_TEMPLATE_URI`: GCS URI of the master PowerPoint template (e.g., `gs://bucket/Proposal_Template.pptx`), you can find the pptx template in docs/.
+    - `AS_APP`: The Gemini Enterprise App ID.
+    - `DATASTORE_ID`: (Optional) Full path to the Vertex AI Search Datastore for internal RAG.(Format: `projects/{PROJECT_ID}/locations/{LOCATION}/collections/default_collection/dataStores/{DATA_STORE_ID}`).
+    - `ENABLE_RAG`: (Default :false) Set to true to enable RAG database if DATASTORE_ID provided.
+    - `ENABLE_DEEP_RESEARCH`: (Default:false) Requires project-level allowlisting before activation.
+    - `MODEL_ARMOR_TEMPLATE_ID`: (Optional) The ID for the Model Armor security template to inspect model safety.
 
 3. **Install Dependencies**
     Using `uv` (recommended):
