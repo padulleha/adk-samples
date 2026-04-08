@@ -35,6 +35,8 @@ lint = [
 ]
 
 [tool.ruff]
+# extends the ruff rules established in the root .toml
+extend = "../../../pyproject.toml"
 line-length = 120
 
 [tool.ruff.format]
