@@ -32,8 +32,16 @@ A multi-agent system built with the [Google Agent Development Kit (ADK)](https:/
 
 **Complete loan application example** (using `data/sample_application_complete.pdf`):
 
+If testing from Agent Engine Playground UI ask:
+
 ```
-User: Process this loan application for SBL-2025-00142
+Process sample_application_complete.pdf from GCS for loan SBL-2025-02142
+```
+
+The complete loan application example interaction is as follows (if you are running locally, you can upload your file through the UI instead of using GCS). The rest of the flow applies to both local and Agent Engine Playground.
+
+```
+User: Process this loan application for SBL-2025-02142
       [uploads sample_application_complete.pdf]
 
 Agent: [Calls check_process_status -> initializes new process]
@@ -58,8 +66,8 @@ User: yes
 
 Agent: [Calls LoanDecisionAgent -> finalizes decision]
 
-       Loan SBL-2025-00142 has been approved.
-       Decision letter DL-2025-00142-001 has been generated.
+       Loan SBL-2025-02142 has been approved.
+       Decision letter DL-2025-02142-001 has been generated.
 ```
 
 **Pause, Repair & Resume example** (using `data/sample_application_incomplete.pdf` which has missing fields):
@@ -255,25 +263,21 @@ Process State (per loan_request_id)
 
 ### Google Cloud Setup
 
+You can use the provided `Makefile` to automate the Google Cloud setup.
+
 ```bash
-# Login and set your project
+# Login
 gcloud auth application-default login
 export PROJECT_ID=your-project-id
 gcloud config set project $PROJECT_ID
-
-# Enable required APIs
-gcloud services enable \
-  aiplatform.googleapis.com \
-  firestore.googleapis.com
-
-# Create Firestore database for state management through command line or through the GCP COnsoldeI
-gcloud firestore databases create \
-  --database=small-business-loan-states \
-  --location=nam5 \
-  --type=firestore-native
 ```
 
-Or you can create the firestore database from the GCP Console UI (name: small-business-loan-states, type: native)
+Run steps below:
+
+- `make enable-services`: Enable required Vertex AI, Firestore, and Storage APIs.
+- `make create-firestore`: Create the Firestore database.
+- `make setup-gcs`: Create GCS bucket and upload sample files (uses `BUCKET_NAME` environment variable or defaults to `<project-id>-small-business-loan-data`).
+- `make grant-permissions`: Grant necessary IAM roles to the service account.
 
 ### Installation
 
@@ -297,24 +301,22 @@ cp .env.example .env
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 GOOGLE_CLOUD_PROJECT=your-project-id
 GOOGLE_CLOUD_LOCATION=global
-
-
 ```
 
 ### Sample Documents
 
-Generate the sample loan application PDFs before running the agent:
-
-```bash
-uv run python data/generate_sample_applications.py
-```
-
-This creates two PDFs in `data/sample_applications/`:
+We have provided two sample PDFs in `data/sample_applications/`:
 
 - `sample_application_complete.pdf` -- Happy path (all fields present, strong financials)
 - `sample_application_incomplete.pdf` -- Same application with missing fields (triggers repair & resume)
 
 Both represent the same fictional business (Cymbal Coffee Roasters LLC / Jane Doe). The incomplete version is missing the loan amount requested to demonstrate the pause, repair & resume flow.
+
+If you want to generate them yourself, use:
+
+```bash
+uv run python data/generate_sample_applications.py
+```
 
 ### Running the Agent
 
@@ -326,7 +328,13 @@ uv run adk web
 Then open `http://localhost:8000`, select `small_business_loan_agent`, upload a sample PDF, and send:
 
 ```
-Process this loan application for SBL-2025-00142
+Process this loan application for SBL-2025-02142
+```
+
+OR (if file is in GCS)
+
+```
+Process sample_application_complete.pdf from GCS for loan SBL-2025-02142
 ```
 
 ## D. Customization & Extension
@@ -496,44 +504,21 @@ agent-starter-pack create my-loan-agent -a local@python/agents/small-business-lo
 
 </details>
 
-The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts. (for more options, run the above command without `--auto-approve -o target` flags)
 
-When deploying to Agent Engine, ensure your `.env` file is configured with required variables. You can then install, test, and deploy using the Makefile provided by the starter pack:
-
-```bash
-cd target/my-loan-agent && make install && make test && make deploy
-```
-
-The service account running the agent must have access to Firestore and GCS (if using GCS fallback cf below). For example, if deploying on Agent Engine:
+When deploying to Agent Engine, ensure your `.env` file is configured with required variables. You can then install, test, and complete the full setup and deployment using the Makefile provided by the starter pack:
 
 ```bash
-export PROJECT_ID=your-project-id
-export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
-
-# Grant Firestore access
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
-  --role="roles/datastore.owner" \
-  --condition=None
-
-# Grant GCS access (Object Viewer is sufficient for reading)
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
-  --role="roles/storage.objectViewer" \
-  --condition=None
+cd target/my-loan-agent && make install && make test && make backend
 ```
+
+Note: File upload is not supported in the Agent Engine Playground currently, so use the GCS to fetch the test files (cf example interaction above)
 
 To register the agent to Gemini Enterprise, do this:
 
 ```bash
 uvx agent-starter-pack@latest register-gemini-enterprise
 ```
-
-Fallback if testing on Agent Engine Playground, use the GCS fallback feature (as file upload is not supported in the agent engine playground currently) to fetch the test files:
-
-1. Upload the 2 PDFs from the `data/sample_applications/` folder to a GCS bucket that you name `small-business-loan-data`.
-2. In the Playground UI, ask:  
-   "Process sample_application_complete.pdf from GCS for loan SBL-2025-43142".
 
 ## License
 

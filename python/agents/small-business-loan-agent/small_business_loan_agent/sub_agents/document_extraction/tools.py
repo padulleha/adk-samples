@@ -1,6 +1,7 @@
 """Callbacks for the Document Extraction Agent."""
 
 import base64
+import os
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
@@ -9,7 +10,9 @@ from small_business_loan_agent.shared_libraries.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-GCS_DATA_BUCKET = "small-business-loan-data"
+def get_gcs_data_bucket() -> str:
+    """Get the GCS data bucket name from environment or fallback to default."""
+    return os.getenv("GCS_DATA_BUCKET", f"{os.getenv('GOOGLE_CLOUD_PROJECT')}-small-business-loan-data")
 
 
 async def _load_document_from_artifacts(callback_context: CallbackContext) -> tuple[bytes | None, str]:
@@ -143,7 +146,7 @@ async def inject_document_into_request(
                     if hasattr(part, "text") and part.text:
                         user_message += part.text + " "
 
-        gcs_bucket = GCS_DATA_BUCKET
+        gcs_bucket = get_gcs_data_bucket()
         if gcs_bucket:
             trigger_keywords = ["gcs", "sample_application_complete.pdf", "sample_application_incomplete.pdf"]
             if any(kw.lower() in user_message.lower() for kw in trigger_keywords):
