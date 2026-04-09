@@ -7,9 +7,11 @@ requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
 authors = [
     { name = "Nora Filali", email = "nora.filali@google.com" },
+    { name = "Neil Desai", email = "nmdesai@google.com" },
 ]
 maintainers = [
     { name = "Nora Filali", email = "nora.filali@google.com" },
+    { name = "Neil Desai", email = "nmdesai@google.com" },
 ]
 dependencies = [
     "google-adk>=1.27.4",
