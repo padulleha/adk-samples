@@ -46,6 +46,7 @@ To learn more, check out the [ADK Documentation](https://google.github.io/adk-do
 │   │   ├── gemini-fullstack
 │   │   ├── gemma-food-tour-guide
 │   │   ├── google-trends-agent
+│   │   ├── high_volume_document_analyzer
 │   │   ├── image-scoring
 │   │   ├── llm-auditor
 │   │   ├── machine-learning-engineering
