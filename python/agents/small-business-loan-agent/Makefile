@@ -46,7 +46,9 @@ enable-services:
 	gcloud services enable \
 		aiplatform.googleapis.com \
 		firestore.googleapis.com \
-		storage.googleapis.com
+		storage.googleapis.com \
+		cloudresourcemanager.googleapis.com
+
 
 create-firestore:
 	@echo "==============================================================================="
