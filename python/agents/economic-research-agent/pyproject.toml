@@ -111,6 +111,7 @@ example_question = "Texas vs Ohio for a Data Center"
 
 [tool.agent-starter-pack.settings]
 agent_directory = "economic_research"
+deployment_targets = ["agent_engine"]
 
 
 [tool.pytest.ini_options]
@@ -121,3 +122,6 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["economic_research"]
+
+[tool.hatch.build.targets.sdist]
+include = ["economic_research"]

@@ -43,7 +43,7 @@ test-integration: ## Run integration tests (Requires API keys)
 
 deploy: ## Deploy the agent to Vertex AI Reasoning Engine (Direct Vertex SDK)
 	@echo "🚀 Deploying ERA to Vertex (Direct SDK)..."
-	PYTHONPATH=. uv run python3 deployment/deploy.py
+	PYTHONPATH=. uv run python3 economic_research/deployment/deploy.py
 
 
 

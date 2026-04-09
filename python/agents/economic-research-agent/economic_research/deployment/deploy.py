@@ -36,8 +36,9 @@ def deploy_era_to_vertex(project_id: str, location: str = "us-central1"):
 
     # Calculate absolute path for extra_packages
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)
-    agent_package_path = project_root
+    package_dir = os.path.dirname(current_dir)
+    project_root = os.path.dirname(package_dir)
+    agent_package_path = package_dir
 
     print(f"📦 Packaging from: {agent_package_path}")
 
