@@ -50,6 +50,8 @@ lint = [
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+# extends the ruff rules established in the root .toml
+extend = "../../../pyproject.toml"
 
 [tool.ruff.lint]
 select = [
@@ -111,4 +113,7 @@ example_question = "Generate an image about a polar bear in the Sahara desert"
 
 [tool.agent-starter-pack.settings]
 agent_directory = "on_brand_genmedia"
+deployment_targets =["agent_engine"]
+extra_directories = ["eval"]
+
 
