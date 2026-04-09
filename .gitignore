@@ -215,6 +215,10 @@ bin/
 # Local VSCode settings
 .vscode/
 
+# Gemini CLI
+GEMINI.md
+*plan.md
+
 # Claude Code
 .claude/
 
