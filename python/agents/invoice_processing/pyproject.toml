@@ -29,3 +29,7 @@ Repository = "https://github.com/GoogleCloudPlatform/adk-samples"
 dev = [
     "ruff>=0.15.9",
 ]
+
+[tool.ruff]
+# extends the ruff rules established in the root .toml
+extend = "../../../pyproject.toml"

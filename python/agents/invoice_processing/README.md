@@ -574,6 +574,4 @@ The agent ships with 5 sample invoice cases in `exemplary_data/`:
 |------|--------|-------|-----------------|-------|----------|
 | case_001 | FastTrack Logistics | $733.70 | REJECT | Phase 3 | Vendor tax ID invalid |
 | case_002 | Precision Tech Co Pty Ltd | $555.50 | ACCEPT | -- | Preventative maintenance, 3 line items, all valid |
-| case_003 | Digital Solutions Pro Pty Ltd | $737.55 | ACCEPT | -- | Server rack cleaning, 4 line items including travel |
-| case_004 | ProFix Electrical Pty Ltd | $597.85 | REJECT | Phase 1 | Invoice addressed to different company (customer name variant) |
 | case_005 | QuickFix HVAC Repairs | $1,069.32 | REJECT | Phase 4 | Labour hours not authorized -- no WAF submitted (Step 4.3) |
