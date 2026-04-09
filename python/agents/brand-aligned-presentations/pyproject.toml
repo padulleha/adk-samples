@@ -62,19 +62,20 @@ dev = [
 # This configuration file is used by goo.gle/agent-starter-pack to power remote templating.
 # It defines the template's properties and settings.
 [tool.agent-starter-pack]
-template_id = "adk-agent"
 agent_module = "presentation_agent.agent"
 agent_object = "root_agent"
 
 [tool.agent-starter-pack.settings]
 agent_directory = "presentation_agent"
+deployment_targets = ["agent_engine"]
+extra_directories = ["eval", "docs"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["eval", "deployment", "presentation_agent"]
+packages = ["eval", "presentation_agent"]
 
 [tool.ruff]
 extend = "../../../pyproject.toml"
@@ -95,14 +96,22 @@ extend-ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["eval", "deployment", "presentation_agent"]
+known-first-party = ["eval", "presentation_agent"]
 
 [tool.codespell]
 ignore-words-list = "rouge"
 skip = "./locust_env/*,uv.lock,.venv,./frontend,**/*.ipynb"
 
 [tool.uv]
-environments = ["sys_platform == 'darwin'"]
+# Universal platform support
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# Suggested fix for import file mismatch
+addopts = "--import-mode=importlib --cache-clear"
+pythonpath = ["."]
 
 [[tool.uv.index]]
 name = "pypi"

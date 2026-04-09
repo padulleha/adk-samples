@@ -50,7 +50,7 @@ deploy: ## Deploy the agent to Vertex AI Reasoning Engine (Direct Vertex SDK)
 
 register-gemini-enterprise: ## Register the agent with Gemini Enterprise (Reasoning Engine Spec)
 	@echo "🛰️ Registering ERA with Gemini Enterprise..."
-	@echo "✅ Agent Spec Registered successfully."
+	@uvx agent-starter-pack register-gemini-enterprise
 lint: ## Run ruff check without fixing
 	@echo "🔍 Running ruff checks..."
 	uvx ruff check .
