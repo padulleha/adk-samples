@@ -39,6 +39,10 @@ lint = [
 extend = "../../../pyproject.toml"
 line-length = 120
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["PLR2004"]
+
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

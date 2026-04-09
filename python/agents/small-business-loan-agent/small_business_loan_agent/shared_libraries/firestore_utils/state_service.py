@@ -52,12 +52,12 @@ class ProcessStateService:
     STEP_PRICING = "PricingAgent"
     STEP_LOAN_DECISION = "LoanDecisionAgent"
 
-    ALL_STEPS = [
+    ALL_STEPS = (
         STEP_DOCUMENT_EXTRACTION,
         STEP_UNDERWRITING,
         STEP_PRICING,
         STEP_LOAN_DECISION,
-    ]
+    )
 
     # Status values
     STATUS_NOT_STARTED = "not_started"

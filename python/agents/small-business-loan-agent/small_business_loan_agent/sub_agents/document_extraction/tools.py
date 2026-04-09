@@ -1,10 +1,12 @@
 """Callbacks for the Document Extraction Agent."""
 
+import asyncio
 import base64
 import os
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
+from google.cloud import storage
 from google.genai import types
 from small_business_loan_agent.shared_libraries.logging_config import get_logger
 
@@ -68,20 +70,17 @@ async def _load_document_from_artifacts(callback_context: CallbackContext) -> tu
 
         # Unknown format
         logger.warning(f"Unexpected artifact format: {type(artifact_data).__name__}")
-        return None, ""
 
     except Exception as e:
         logger.error(f"Error loading document from artifact service: {e}")
-        return None, ""
+
+    return None, ""
 
 
 async def _load_document_from_gcs(bucket_name: str, blob_name: str) -> bytes:
     """Download a file from GCS and return bytes."""
-    from google.cloud import storage
 
     # Run in thread executor as storage client is synchronous
-    import asyncio
-
     def _download():
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -89,6 +88,59 @@ async def _load_document_from_gcs(bucket_name: str, blob_name: str) -> bytes:
         return blob.download_as_bytes()
 
     return await asyncio.to_thread(_download)
+
+
+def _get_inline_doc(state: dict) -> types.Part | None:
+    """Helper to extract document from session state."""
+    inline_doc = state.get("inline_document")
+    if inline_doc and isinstance(inline_doc, dict):
+        data_b64 = inline_doc.get("data", "")
+        mime_type = inline_doc.get("mime_type", "application/pdf")
+        if data_b64:
+            try:
+                raw_bytes = base64.b64decode(data_b64)
+                logger.info(f"Loaded document from session state: mime_type={mime_type}, size={len(raw_bytes)} bytes")
+                return types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
+            except Exception as e:
+                logger.error(f"Failed to decode inline_document base64: {e}")
+    return None
+
+
+async def _get_artifact_doc(callback_context: CallbackContext) -> types.Part | None:
+    """Helper to extract document from artifact service."""
+    raw_bytes, mime_type = await _load_document_from_artifacts(callback_context)
+    if raw_bytes:
+        if not isinstance(raw_bytes, bytes):
+            if isinstance(raw_bytes, str):
+                raw_bytes = raw_bytes.encode("utf-8")
+            else:
+                raw_bytes = bytes(raw_bytes)
+
+        logger.info(f"Loaded document from artifact service: mime_type={mime_type}, size={len(raw_bytes)} bytes")
+        return types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
+    return None
+
+
+async def _get_gcs_doc(user_message: str) -> types.Part | None:
+    """Helper to extract document from GCS fallback."""
+    gcs_bucket = get_gcs_data_bucket()
+    if gcs_bucket:
+        trigger_keywords = ["gcs", "sample_application_complete.pdf", "sample_application_incomplete.pdf"]
+        if any(kw.lower() in user_message.lower() for kw in trigger_keywords):
+            logger.info("Triggered GCS file fetch based on user request keywords.")
+            file_to_fetch = "sample_application_complete.pdf"  # Default
+            if "sample_application_incomplete.pdf" in user_message:
+                file_to_fetch = "sample_application_incomplete.pdf"
+            try:
+                raw_bytes = await _load_document_from_gcs(gcs_bucket, file_to_fetch)
+                mime_type = "application/pdf"
+                logger.info(f"Loaded document from GCS: {file_to_fetch}, size={len(raw_bytes)} bytes")
+                return types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
+            except Exception as e:
+                logger.error(f"Failed to load document from GCS: {e}")
+    else:
+        logger.warning("No document found and GCS_DATA_BUCKET not configured for fallback.")
+    return None
 
 
 async def inject_document_into_request(
@@ -103,41 +155,14 @@ async def inject_document_into_request(
 
     Document sources (checked in order):
     1. Session state "inline_document" — file sent as inline_data
-       (ADK Web local development, ADK evaluations)
     2. Artifact service — file uploaded through Gemini Enterprise (AgentSpace),
-       where the platform stores uploaded files as artifacts
     3. GCS fallback — if enabled by presence of keywords in user request
-       and GCS_DATA_BUCKET env var is set.
     """
-    doc_part = None
+    doc_part = _get_inline_doc(callback_context.state)
 
-    # Source 1: inline_document in session state (ADK Web / evaluations)
-    inline_doc = callback_context.state.get("inline_document")
-    if inline_doc and isinstance(inline_doc, dict):
-        data_b64 = inline_doc.get("data", "")
-        mime_type = inline_doc.get("mime_type", "application/pdf")
-        if data_b64:
-            try:
-                raw_bytes = base64.b64decode(data_b64)
-                doc_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
-                logger.info(f"Loaded document from session state: mime_type={mime_type}, size={len(raw_bytes)} bytes")
-            except Exception as e:
-                logger.error(f"Failed to decode inline_document base64: {e}")
-
-    # Source 2: artifact service (Gemini Enterprise / AgentSpace)
     if doc_part is None:
-        raw_bytes, mime_type = await _load_document_from_artifacts(callback_context)
-        if raw_bytes:
-            if not isinstance(raw_bytes, bytes):
-                if isinstance(raw_bytes, str):
-                    raw_bytes = raw_bytes.encode("utf-8")
-                else:
-                    raw_bytes = bytes(raw_bytes)
+        doc_part = await _get_artifact_doc(callback_context)
 
-            doc_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
-            logger.info(f"Loaded document from artifact service: mime_type={mime_type}, size={len(raw_bytes)} bytes")
-
-    # Source 3: GCS fallback
     if doc_part is None:
         user_message = ""
         for content in llm_request.contents:
@@ -146,23 +171,7 @@ async def inject_document_into_request(
                     if hasattr(part, "text") and part.text:
                         user_message += part.text + " "
 
-        gcs_bucket = get_gcs_data_bucket()
-        if gcs_bucket:
-            trigger_keywords = ["gcs", "sample_application_complete.pdf", "sample_application_incomplete.pdf"]
-            if any(kw.lower() in user_message.lower() for kw in trigger_keywords):
-                logger.info("Triggered GCS file fetch based on user request keywords.")
-                file_to_fetch = "sample_application_complete.pdf"  # Default
-                if "sample_application_incomplete.pdf" in user_message:
-                    file_to_fetch = "sample_application_incomplete.pdf"
-                try:
-                    raw_bytes = await _load_document_from_gcs(gcs_bucket, file_to_fetch)
-                    mime_type = "application/pdf"
-                    doc_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=raw_bytes))
-                    logger.info(f"Loaded document from GCS: {file_to_fetch}, size={len(raw_bytes)} bytes")
-                except Exception as e:
-                    logger.error(f"Failed to load document from GCS: {e}")
-        else:
-            logger.warning("No document found and GCS_DATA_BUCKET not configured for fallback.")
+        doc_part = await _get_gcs_doc(user_message)
 
     if doc_part is None:
         logger.warning("No document found in session state, artifact service, or GCS")
