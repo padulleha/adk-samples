@@ -9,7 +9,7 @@ from google_trends_agent.tools import execute_bigquery_sql
 # Construct the path to the .env file in the parent directory
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 
-# Load the environment variables from the .env file
+# Load the environment variables from the .env file.
 load_dotenv(dotenv_path)
 
 # Now you can access your environment variables using os.getenv()

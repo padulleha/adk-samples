@@ -17,14 +17,12 @@
 import logging
 import sys
 
-_logging_configured = False
+_logging_state = {"configured": False}
 
 
 def _setup_logging() -> None:
     """Set up basic logging configuration."""
-    global _logging_configured
-
-    if _logging_configured:
+    if _logging_state["configured"]:
         return
 
     logging.basicConfig(
@@ -42,12 +40,12 @@ def _setup_logging() -> None:
     ]:
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-    _logging_configured = True
+    _logging_state["configured"] = True
 
 
 def get_logger(name: str) -> logging.Logger:
     """Get a logger instance with proper configuration."""
-    if not _logging_configured:
+    if not _logging_state["configured"]:
         _setup_logging()
 
     return logging.getLogger(name)
