@@ -28,6 +28,7 @@ dev = [
     "pytest-asyncio>=0.23.8",
     "google-adk[eval]==1.28.0",
     "nest-asyncio>=1.6.0",
+    "agent-starter-pack>=0.14.1",
 ]
 
 deployment = [
