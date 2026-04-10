@@ -43,7 +43,7 @@ The application follows ADK's recommended concurrent task pattern:
 ## Prerequisites
 
 - Python 3.10 or higher
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- [uv](https://docs.astral.sh/uv/)
 - Google API key (for Gemini Live API) or Google Cloud project (for Vertex AI Live API)
 
 **Installing uv (if not already installed):**
@@ -57,32 +57,6 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ```
 
 ## Installation
-
-### Agent Starter Pack (Recommended)
-
-Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed).
-
-```bash
-uvx agent-starter-pack create my-bidi-demo -a adk@bidi-demo
-```
-
-<details>
-<summary>Alternative: Using pip and a virtual environment</summary>
-
-```bash
-# Create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
-
-# Install the starter pack and create your project
-pip install --upgrade agent-starter-pack
-agent-starter-pack create my-bidi-demo -a adk@bidi-demo
-```
-
-</details>
-
-The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
-
-### Manual Setup
 
 ### 1. Navigate to Demo Directory
 
@@ -290,8 +264,14 @@ bidi-demo/
 │           ├── audio-recorder.js         # Audio recording
 │           ├── pcm-player-processor.js   # Audio processing
 │           └── pcm-recorder-processor.js # Audio processing
-├── tests/                        # E2E tests and test logs
+├── agent_engine/                 # Agent Engine deployment scripts
+│   ├── deploy.py               # Deploy agent to Agent Engine
+│   ├── test.py                 # Test deployed agent via bidi streaming
+│   ├── cleanup.py              # Delete deployed agent
+│   └── .env.template           # Environment template for Agent Engine
 ├── pyproject.toml               # Python project configuration
+├── Dockerfile                   # Cloud Run container image
+├── .dockerignore                # Docker build exclusions
 └── README.md                    # This file
 ```
 
@@ -448,6 +428,200 @@ uv run isort --check .
 # Using pip
 black --check .
 isort --check .
+```
+
+## Deployment to Cloud Run
+
+### 1. Prerequisites
+
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) installed and configured
+- A Google Cloud project with Cloud Run API enabled
+- Vertex AI API enabled (if using Vertex AI Live API)
+
+### 2. Configure Environment
+
+Use `app/.env` as the source of truth. Export the values before deploying:
+
+```bash
+set -a
+source app/.env
+set +a
+```
+
+### 3. Deploy
+
+From the `src/bidi-demo` directory, deploy with `gcloud run deploy`:
+
+**Vertex AI Live API mode** (`GOOGLE_GENAI_USE_VERTEXAI=TRUE`):
+
+```bash
+gcloud run deploy bidi-demo \
+  --source . \
+  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --region "${GOOGLE_CLOUD_LOCATION}" \
+  --allow-unauthenticated \
+  --timeout 3600 \
+  --min-instances 1 \
+  --max-instances 1 \
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI="${GOOGLE_GENAI_USE_VERTEXAI}",GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}",GOOGLE_CLOUD_LOCATION="${GOOGLE_CLOUD_LOCATION}",DEMO_AGENT_MODEL="${DEMO_AGENT_MODEL}"
+```
+
+**Gemini Live API mode** (`GOOGLE_GENAI_USE_VERTEXAI=FALSE`):
+
+```bash
+gcloud run deploy bidi-demo \
+  --source . \
+  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --region "${GOOGLE_CLOUD_LOCATION}" \
+  --allow-unauthenticated \
+  --timeout 3600 \
+  --min-instances 1 \
+  --max-instances 1 \
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI="${GOOGLE_GENAI_USE_VERTEXAI}",GOOGLE_API_KEY="${GOOGLE_API_KEY}",GOOGLE_CLOUD_PROJECT="${GOOGLE_CLOUD_PROJECT}",GOOGLE_CLOUD_LOCATION="${GOOGLE_CLOUD_LOCATION}",DEMO_AGENT_MODEL="${DEMO_AGENT_MODEL}"
+```
+
+Cloud Run deployments are not instant. A normal deploy can take a few minutes while source upload, Cloud Build, image rollout, and revision health checks complete.
+
+### 4. Make the Service Public (If Needed)
+
+In some projects, `--allow-unauthenticated` finishes with an IAM warning instead of granting public access. If that happens:
+
+```bash
+gcloud run services add-iam-policy-binding bidi-demo \
+  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --region "${GOOGLE_CLOUD_LOCATION}" \
+  --member=allUsers \
+  --role=roles/run.invoker
+```
+
+### 5. Validate the Deployment
+
+Get the service URL:
+
+```bash
+gcloud run services describe bidi-demo \
+  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --region "${GOOGLE_CLOUD_LOCATION}" \
+  --format='value(status.url)'
+```
+
+Open the app in your browser at the returned URL.
+
+### 6. Clean Up Old Revisions
+
+After each successful deploy, delete older revisions and keep only the newest five:
+
+```bash
+for rev in $(gcloud run revisions list \
+  --service bidi-demo \
+  --project "${GOOGLE_CLOUD_PROJECT}" \
+  --region "${GOOGLE_CLOUD_LOCATION}" \
+  --format='value(metadata.name)' | tail -n +6); do
+  gcloud run revisions delete "$rev" \
+    --project "${GOOGLE_CLOUD_PROJECT}" \
+    --region "${GOOGLE_CLOUD_LOCATION}" \
+    --quiet
+done
+```
+
+### Deployment Checklist
+
+- The root URL serves the HTML app
+- Text chat works end-to-end
+- Audio mode connects and streams (native audio model required)
+- WebSocket connection stays connected during conversation
+- Image input is accepted and processed
+
+## Deployment to Agent Engine
+
+You can deploy the agent to [Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) for managed bidirectional streaming. Agent Engine handles agent scaling, infrastructure, and lifecycle management on Google Cloud.
+
+### Agent Engine vs Cloud Run
+
+Agent Engine hosts **agents**, not web applications. It does not expose a public URL or serve static files — access is via authenticated Vertex AI SDK WebSocket connections only. This makes it well suited for backend agent hosting, but not for serving the full bidi-demo webapp directly.
+
+| | Cloud Run | Agent Engine |
+|---|---|---|
+| **What's deployed** | Full webapp (FastAPI + frontend + agent) | Agent only |
+| **Public URL** | Yes | No |
+| **Static files** | Yes | No |
+| **Access method** | Browser WebSocket | Vertex AI SDK (authenticated) |
+| **Use case** | Self-contained demo, public apps | Managed agent backend, split architectures |
+
+To combine Agent Engine with a browser-facing frontend, use a split architecture where Cloud Run serves the UI and proxies WebSocket connections to Agent Engine:
+
+```
+Browser ──ws──► Cloud Run (proxy) ──SDK──► Agent Engine (agent)
+```
+
+### How the Scripts Work
+
+Three scripts in `agent_engine/` manage the Agent Engine lifecycle. All read configuration from `app/.env`.
+
+**`agent_engine/deploy.py`** — Wraps the existing agent from `app/google_search_agent/agent.py` in an `AdkApp`, then deploys it to Agent Engine with `EXPERIMENTAL` server mode (required for bidi streaming). The deployed agent's resource name is saved to `agent_resource_name.txt` for use by the other scripts.
+
+**`agent_engine/test.py`** — Connects to the deployed agent via `client.aio.live.agent_engines.connect()` and sends text queries as `LiveRequest` objects over a WebSocket. Supports two modes: automated (runs preset queries) and interactive (`--interactive` flag for a chat loop). Responses arrive as ADK `Event` objects containing audio or text.
+
+**`agent_engine/cleanup.py`** — Reads the resource name from `agent_resource_name.txt`, deletes the deployed agent from Agent Engine, and removes the file.
+
+### 1. Prerequisites
+
+- Google Cloud project with Vertex AI API enabled
+- Authenticated via `gcloud auth application-default login`
+- A Cloud Storage bucket for staging
+
+### 2. Install Agent Engine Dependencies
+
+```bash
+uv sync --extra agent-engine
+```
+
+This installs `google-cloud-aiplatform[agent_engines,adk]`, `numpy`, and `websockets` as optional dependencies.
+
+### 3. Configure Environment
+
+Copy the template and edit with your project details:
+
+```bash
+cp agent_engine/.env.template app/.env
+```
+
+Then edit `app/.env`:
+
+```bash
+GOOGLE_GENAI_USE_VERTEXAI=TRUE
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+STAGING_BUCKET=gs://your-bucket-name
+
+# Must use a Vertex AI Live API model
+DEMO_AGENT_MODEL=gemini-live-2.5-flash-native-audio
+```
+
+> **Note:** Agent Engine requires `GOOGLE_GENAI_USE_VERTEXAI=TRUE` and a Vertex AI model. The `STAGING_BUCKET` is a Cloud Storage bucket used to stage deployment artifacts. The `GOOGLE_API_KEY` is not needed — Agent Engine uses Application Default Credentials.
+
+### 4. Deploy
+
+```bash
+uv run agent_engine/deploy.py
+```
+
+The resource name is saved to `agent_resource_name.txt`.
+
+### 5. Test
+
+```bash
+# Automated test
+uv run agent_engine/test.py
+
+# Interactive chat
+uv run agent_engine/test.py --interactive
+```
+
+### 6. Cleanup
+
+```bash
+uv run agent_engine/cleanup.py
 ```
 
 ## Additional Resources
