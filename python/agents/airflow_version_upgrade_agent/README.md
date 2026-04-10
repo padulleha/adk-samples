@@ -1,4 +1,4 @@
-# Airflow Version Migration Agent
+# Airflow Version Upgrade Agent
 
 This project provides an intelligent, two-stage agentic system built with the Google Cloud Agent Development Kit (ADK) to automate the migration of Apache Airflow DAGs from a source version to a target version.
 
@@ -57,7 +57,6 @@ Before you begin, ensure you have the following:
     *   `iamcredentials.googleapis.com`
     *   `cloudbuild.googleapis.com`
     *   `artifactregistry.googleapis.com`
-    *   `secretmanager.googleapis.com`
     *   `bigquery.googleapis.com`
     *   `aiplatform.googleapis.com`
     *   `storage-component.googleapis.com`
@@ -71,102 +70,73 @@ Before you begin, ensure you have the following:
     *   Service Account User (`roles/iam.serviceAccountUser`)
     *   Service Usage Consumer (`roles/serviceusage.serviceUsageConsumer`)
     *   Storage Admin (`roles/storage.admin`)
+    *   BigQuery DataEditor (`roles/bigquery.dataEditor`)
+    *   BigQuery JobUser (`roles/bigquery.jobUser`)
+    *   Discovery Engine Editor (`roles/discoveryengine.user`)
+    *   Service Usage Consumer (`roles/serviceusage.serviceUsageConsumer`)
+
+Consider your user has permissions on all the APIs and resources. If not, the given setup should take care of required access for user and service account.
 
 ---
 
 ## Setup and Configuration
 
-### 1. Terraform Infrastructure Provisioning
+Follow these steps to set up your local environment and provision the required infrastructure.
 
-We use Terraform to quickly provision the core storage data components required by the agent (GCS buckets for your DAGs, and BigQuery for the knowledge corpus).
-
-**Prerequisite for Remote State:**
-If you choose to use the `backend "gcs"` block in `terraform/backend.tf` to store your Terraform state remotely, you **must create the bucket before running `terraform init`**. Terraform cannot create its own state bucket during initialization. 
-
-You can create this bucket using `gcloud`:
-
-```bash
-# Create the Terraform state bucket first
-gcloud storage buckets create gs://YOUR_STATE_BUCKET_NAME --location=US
-```
-*(Note: If you are just testing locally, you can comment out the `backend "gcs"` block in `backend.tf` to use local state instead.)*
-
-Navigate to the `terraform/` directory and configure your variables:
-
-```bash
-cd terraform/
-
-# Initialize Terraform (Ensure backend bucket exists if using remote state)
-terraform init
-
-# Review and apply the configuration
-terraform apply
-```
-
-During the prompt, provide your `project_id`, `gcs_source_bucket_name`, and `gcs_destination_bucket_name`. 
-Terraform should create the bigquery dataset and table, and the gcs buckets. Source bucket will have the sample dags from airflow 1.10 to test the agent. Destination bucket will be empty.
-
-### 2. Create Vertex AI Datastore and Connect to BigQuery
-
-The datastore setup is best done manually through the Google Cloud UI rather than Terraform:
-
-1.  Go to the Google Cloud Console -> **AI Applications** > Data Stores (Vertex AI Search and Conversation).
-2.  Create a new Data Store, selecting **BigQuery** as the source.
-3.  Point it to the `${PROJECT_ID}.airflow_migration_kb.migration_corpus` table that Terraform just created.
-4.  Set the sync frequency as your needs dictate and name the connector (e.g., `airflow-migration-connector`).
-5.  Set the region as global.
-6.  Note down your **Data Store ID** and **Collection ID** after linking.
-
-### 3. Set up Vertex AI Web Search App
-
-#### Step 1: Create the Data Store (The "Filter List")
-
-1.  In the Google Cloud Console, go to **Vertex AI Search and Conversation** (sometimes called Agent Builder).
-2.  On the left menu, click **Data Stores**, then click **+ Create Data Store**.
-3.  Select **Websites**.
-4.  **CRITICAL STEP:** Make sure **Advanced website indexing** is toggled **OFF**. (This is what bypasses the domain verification requirement).
-5.  In the "Sites to include" box, add your URLs exactly like this (no `https://`):
-    ```text
-    airflow.apache.org/docs/*
-    stackoverflow.com/questions/tagged/airflow/*
-    medium.com/*
-    ```
-6.  Click **Continue**.
-7.  Name your data store (e.g., `airflow-web-ds`) and click **Create**.
-
-#### Step 2: Create the Search App (The "API Endpoint")
-
-*Note: Basic Website Data Stores cannot be queried until attached to an App.*
-
-1.  On the left menu, click **Apps**, then click **+ Create App**.
-2.  Select **Search** as the app type.
-3.  Under "Configuration":
-    *   **Company name:** (Enter your company or project name)
-    *   **App name:** e.g., `airflow-migration-app`
-    *   **Region:** Leave as `global` (Basic Website Search requires `global`).
-4.  Click **Continue**.
-5.  **Link the Data Store:** You will see a list of your Data Stores. Check the box next to the `airflow-web-ds` you created in Step 1.
-6.  Click **Create**.
-
-
-### 4. Local Development Setup
+### 1. Local Development Setup
 
 1.  **Clone the Repository**:
     ```bash
     git clone <your-repo-url>
     cd <your-repo-folder>
     ```
-2.  **Create a Virtual Environment**:
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-3.  **Install Dependencies**:
+2.  **Install Dependencies**:
+    We recommend using `uv` for dependency management. Run the following command to install dependencies:
     ```bash
     uv sync --dev
     ```
-4.  **Configure Environment**:
-    *   Create a `.env` file and fill in the values with your project details (Project ID, GCS URIs, BigQuery details, Vertex AI Web Search configs, etc.).
+    *(Alternatively, you can use `pip` with a virtual environment.)*
+
+3.  **Configure Environment**:
+    Create a `.env` file in the project root based on `.env.example` and fill in the values with your project details:
+    *   `PROJECT_ID`: Your Google Cloud Project ID.
+    *   `USER_EMAIL`: Your Google Cloud user email (used for IAM bindings).
+    *   `TF_STATE_BUCKET_NAME`: A unique name for the GCS bucket to store Terraform state.
+    *   Other variables can be left as defaults or customized.
+
+### 2. Automated Infrastructure Setup
+
+We provide a `Makefile` to automate the provisioning of all required Google Cloud infrastructure and Vertex AI Search resources for local testing.
+
+**Prerequisites:**
+*   Ensure you have authenticated with Google Cloud:
+    ```bash
+    gcloud auth application-default login
+    ```
+*   Ensure you have the required permissions listed in the [Prerequisites](#prerequisites) section.
+
+To deploy the infrastructure, run the following command from the project root:
+
+```bash
+make deploy
+```
+
+This command will:
+1.  Source your `.env` file.
+2.  Check if the Terraform state bucket exists, and create it if it does not.
+3.  Initialize and apply Terraform to create:
+    *   GCS buckets for source and destination DAGs.
+    *   BigQuery dataset and table for the migration corpus.
+    *   Sample Airflow 1.10 DAGs in the source bucket for testing.
+    *   Necessary IAM role bindings for the default Compute service account and your user account.
+4.  Run a Python script to automate the creation of Vertex AI Search resources:
+    *   Create a Website Data Store with predefined Airflow documentation sources.
+    *   Create a BigQuery Data Store pointing to the newly created table.
+    *   Create a Search App and link it to the Website Data Store.
+
+Upon completion, you will see a summary of the created resources.
+
+*Note: This automated setup is intended for local development and testing. For production deployments, refer to the [Deployment to Cloud Run](#deployment-to-cloud-run) section.*
 
 ### Alternative: Using Agent Starter Pack
 
@@ -213,6 +183,20 @@ You can now interact with your agent in the ADK web UI, typically at `http://127
 ## Deployment to Cloud Run
 
 This agent is designed to be deployed as a containerized service on Cloud Run via the Agent Development Kit (ADK).
+
+### Required Permissions for Cloud Run Deployment
+
+If you plan to deploy this agent to Cloud Run (e.g., using `adk deploy`), ensure the deploying user or service account has the following additional permissions:
+
+*   **Cloud Build Editor** (`roles/cloudbuild.builds.editor`)
+*   **Artifact Registry Admin** (`roles/artifactregistry.admin`)
+*   **Cloud Run Admin** (`roles/run.admin`)
+*   **Service Account User** (`roles/iam.serviceAccountUser`) on the runtime service account (e.g., the default Compute Engine service account if used).
+
+These permissions are required because `adk deploy` typically builds a container image using Cloud Build, pushes it to Artifact Registry, and then creates a Cloud Run service.
+
+> [!NOTE]
+> These permissions were ignored in the core Terraform scripts as they are only needed for remote deployment, and the agent is assumed to be running in a Google Cloud environment (like Cloud Shell) with sufficient permissions for local execution/testing.
 
 1. Set Deployment Variables:
 

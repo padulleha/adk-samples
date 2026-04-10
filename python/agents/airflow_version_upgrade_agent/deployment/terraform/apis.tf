@@ -12,8 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-# Fetch project number for service agent identities
-data "google_project" "project" {
-  project_id = local.project_id
+# Enable required Google Cloud APIs
+resource "google_project_service" "apis" {
+  for_each = toset([
+    "run.googleapis.com",
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "bigquery.googleapis.com",
+    "aiplatform.googleapis.com",
+    "storage.googleapis.com",
+    "customsearch.googleapis.com",
+    "discoveryengine.googleapis.com",
+  ])
+  project            = local.project_id
+  service            = each.key
+  disable_on_destroy = false
 }

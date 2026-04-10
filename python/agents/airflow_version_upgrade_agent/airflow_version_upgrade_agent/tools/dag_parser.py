@@ -174,7 +174,7 @@ def extract_operators_from_gcs(gcs_folder_uri: str) -> list[str]:
 
 # Local testing
 # if __name__ == "__main__":
-#     dags_gcs_path = "gs://input_dags/"
+#     dags_gcs_path = "gs://<bucket-name>/dags/"
 
 #     print(f"Searching for operators in: {dags_gcs_path}")
 #     operators = extract_operators_from_gcs(dags_gcs_path)

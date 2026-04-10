@@ -27,15 +27,7 @@ from google.cloud.exceptions import NotFound
 
 # Define the path to the .env file
 env_file_path = Path(__file__).parent.parent / ".env"
-print(env_file_path)
-
-# Load environment variables from the specified .env file
 load_dotenv(dotenv_path=env_file_path)
-
-PROJECT_ID = os.getenv("PROJECT_ID")
-BIGQUERY_DATASET = os.getenv("BIGQUERY_DATASET")
-BIGQUERY_TABLE = os.getenv("BIGQUERY_TABLE")
-BIGQUERY_TABLE_ID = f"{PROJECT_ID}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}"
 
 output_schema = {
     "operator_path": "string",
@@ -51,35 +43,27 @@ output_schema = {
     "created_at": "timestamp",
 }
 
-bq_client = bigquery.Client(project=PROJECT_ID)
-
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
 @cache
-def ensure_bq_table_exists():
-    """
-    Checks if the BigQuery table exists and creates it if it does not.
-    """
-    try:
-        bq_client.get_table(BIGQUERY_TABLE_ID)
-        logging.info(
-            f"Table {BIGQUERY_TABLE_ID} already exists. No action taken."
-        )
-    except NotFound:
-        logging.warning(
-            f"Table {BIGQUERY_TABLE_ID} not found. Proceeding to create it."
-        )
-        try:
-            # Create the dataset if it doesn't exist.
-            dataset = bigquery.Dataset(f"{PROJECT_ID}.{BIGQUERY_DATASET}")
-            dataset.location = "US"  # Or your preferred location
-            bq_client.create_dataset(dataset, exists_ok=True)
-            logging.info(f"Dataset {BIGQUERY_DATASET} ensured.")
+def ensure_bq_table_exists(project_id: str, dataset_name: str, table_name: str):
+    """Checks if the BigQuery table exists and creates it if it does not."""
+    bq_client = bigquery.Client(project=project_id)
+    table_id = f"{project_id}.{dataset_name}.{table_name}"
 
-            # Define the schema and create the table
+    try:
+        bq_client.get_table(table_id)
+        logging.info(f"Table {table_id} already exists.")
+    except NotFound:
+        logging.warning(f"Table {table_id} not found. Proceeding to create it.")
+        try:
+            dataset = bigquery.Dataset(f"{project_id}.{dataset_name}")
+            dataset.location = "US"
+            bq_client.create_dataset(dataset, exists_ok=True)
+
             schema = [
                 bigquery.SchemaField(
                     "operator_path", "STRING", mode="REQUIRED"
@@ -101,21 +85,21 @@ def ensure_bq_table_exists():
                     "created_at", "TIMESTAMP", mode="REQUIRED"
                 ),
             ]
-            table = bigquery.Table(BIGQUERY_TABLE_ID, schema=schema)
+            table = bigquery.Table(table_id, schema=schema)
             bq_client.create_table(table)
-            logging.info(f"Successfully created table {BIGQUERY_TABLE_ID}.")
+            logging.info(f"Successfully created table {table_id}.")
         except Exception as e:
             logging.error(f"Error creating BigQuery dataset or table: {e}")
-            raise
-    except Exception as e:
-        logging.error(
-            f"An unexpected error occurred while checking for table {BIGQUERY_TABLE_ID}: {e}"
-        )
-        raise
+            raise Exception(
+                f"Failed to create BigQuery infrastructure: {e}"
+            ) from e
 
 
 def generate_and_store_knowledge(
-    research_results: list[dict], source_version: str, target_version: str
+    research_results: list[dict],
+    source_version: str,
+    target_version: str,
+    project_id: str,
 ) -> str:
     """
     Processes scraped text with an LLM and stores it in BigQuery as a data corpus.
@@ -128,9 +112,27 @@ def generate_and_store_knowledge(
     Returns:
         str: A message indicating the completion of the knowledge base update.
     """
-    ensure_bq_table_exists()
+    dataset_name = os.getenv("BIGQUERY_DATASET")
+    table_name = os.getenv("BIGQUERY_TABLE")
 
-    client = genai.Client(vertexai=True, project=PROJECT_ID, location="global")
+    if not dataset_name or not table_name:
+        return "ERROR: BIGQUERY_DATASET or BIGQUERY_TABLE missing from environment variables."
+
+    table_id = f"{project_id}.{dataset_name}.{table_name}"
+    bq_client = bigquery.Client(project=project_id)
+
+    try:
+        ensure_bq_table_exists(project_id, dataset_name, table_name)
+    except Exception as e:
+        return str(e)  # Return error to the agent
+
+    client = genai.Client(
+        vertexai=True, project=project_id, location="us-central1"
+    )
+
+    success_count = 0
+    errors_list = []
+
     for result in research_results:
         operator = result["operator"]
         scraped_text = result["content"]
@@ -178,24 +180,29 @@ def generate_and_store_knowledge(
                 "created_at": datetime.now(UTC).isoformat(),
             }
 
-            errors = bq_client.insert_rows_json(
-                BIGQUERY_TABLE_ID, [row_to_insert]
-            )
+            errors = bq_client.insert_rows_json(table_id, [row_to_insert])
             if errors:
-                raise Exception(f"BigQuery insertion errors: {errors}")
-            logging.info(f"Successfully stored knowledge for {operator}")
+                errors_list.append(f"BQ Error for {operator}: {errors}")
+            else:
+                success_count += 1
+                logging.info(f"Successfully stored knowledge for {operator}")
 
         except Exception as e:
+            errors_list.append(f"Failed processing {operator}: {e!s}")
             logging.error(
                 f"Failed to process and store knowledge for {operator}: {e}"
             )
 
-    return "Knowledge base update complete."
+    if errors_list:
+        return f"WARNING: Completed with errors. Inserted {success_count} operators. Errors: {errors_list[:2]}..."
+
+    return f"Knowledge base update complete. Successfully stored {success_count} operators."
 
 
+# For local testing
 # if __name__ == '__main__':
 #     from web_scrapper import research_operator_documentation
-#     project_id = "<project-id>"
+#     project_id = os.getenv("PROJECT_ID")
 
 #     # Example usage
 #     operator_path = ["airflow.contrib.operators.bigquery_operator.BigQueryOperator",
@@ -208,5 +215,5 @@ def generate_and_store_knowledge(
 #     source_version = '1.10'
 #     target_version = '2.10.5'
 #     scraped_content_dict = research_operator_documentation(operator_path, source_version, target_version, project_id)
-#     return_msg = generate_and_store_knowledge(scraped_content_dict, source_version, target_version)
+#     return_msg = generate_and_store_knowledge(scraped_content_dict, source_version, target_version, project_id)
 #     print(return_msg)

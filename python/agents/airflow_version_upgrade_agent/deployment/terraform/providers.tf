@@ -18,10 +18,14 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.0"
+    }
   }
 }
 
 provider "google" {
-  project = var.project_id
+  project = local.project_id
   region  = var.region
 }

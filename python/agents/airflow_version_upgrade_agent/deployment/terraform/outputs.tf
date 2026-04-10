@@ -14,12 +14,12 @@
 
 output "gcs_source_bucket_name_output" {
   description = "Name of the GCS bucket for source DAGs."
-  value       = var.gcs_source_bucket_name
+  value       = local.source_bucket_name
 }
 
 output "gcs_destination_bucket_name_output" {
   description = "Name of the GCS bucket for destination DAGs."
-  value       = var.gcs_destination_bucket_name
+  value       = local.destination_bucket_name
 }
 
 output "bigquery_table_id_output" {

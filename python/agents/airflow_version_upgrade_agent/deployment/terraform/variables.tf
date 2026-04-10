@@ -15,6 +15,7 @@
 variable "project_id" {
   description = "The GCP project ID."
   type        = string
+  default     = ""
 }
 
 variable "region" {
@@ -26,11 +27,13 @@ variable "region" {
 variable "gcs_source_bucket_name" {
   description = "Name for the GCS bucket where source Airflow DAGs are located."
   type        = string
+  default     = ""
 }
 
 variable "gcs_destination_bucket_name" {
   description = "Name for the GCS bucket where converted Airflow DAGs will be stored."
   type        = string
+  default     = ""
 }
 
 variable "bigquery_dataset_id" {
@@ -86,4 +89,10 @@ variable "upload_sample_dags" {
   description = "Whether to upload sample DAGs from the local 'input_dags' directory into the source bucket."
   type        = bool
   default     = true
+}
+
+variable "user_email" {
+  description = "The email address of the user to grant impersonation permissions."
+  type        = string
+  default     = ""
 }

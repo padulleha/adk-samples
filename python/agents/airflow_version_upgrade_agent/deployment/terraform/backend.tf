@@ -14,7 +14,7 @@
 
 terraform {
   backend "gcs" {
-    bucket = "airflow-migration-agent-tf-state" # Replace with your actual state bucket name
+    # bucket = "airflow-migration-agent-tf-state" # Pass this via -backend-config="bucket=$BUCKET_NAME" during terraform init
     prefix = "airflow-migration-agent"
   }
 }

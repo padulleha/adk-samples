@@ -14,8 +14,8 @@
 
 resource "google_storage_bucket" "source_dags_bucket" {
   count                       = var.create_source_bucket ? 1 : 0
-  project                     = var.project_id
-  name                        = var.gcs_source_bucket_name
+  project                     = local.project_id
+  name                        = local.source_bucket_name
   location                    = "US" # Or a specific region/multi-region
   uniform_bucket_level_access = true
   force_destroy               = false # Set to true for easier deletion during dev/test, but be cautious!
@@ -29,7 +29,7 @@ resource "google_storage_bucket" "source_dags_bucket" {
 resource "google_storage_bucket_object" "source_dags" {
   for_each = var.upload_sample_dags ? fileset("${path.module}/input_dags", "*") : toset([])
   name     = "${var.gcs_source_dags_folder}${each.value}"
-  bucket   = var.gcs_source_bucket_name
+  bucket   = local.source_bucket_name
   source   = "${path.module}/input_dags/${each.value}"
   depends_on = [google_storage_bucket.source_dags_bucket]
 }
@@ -37,8 +37,8 @@ resource "google_storage_bucket_object" "source_dags" {
 
 resource "google_storage_bucket" "destination_dags_bucket" {
   count                       = var.create_destination_bucket ? 1 : 0
-  project                     = var.project_id
-  name                        = var.gcs_destination_bucket_name
+  project                     = local.project_id
+  name                        = local.destination_bucket_name
   location                    = "US" # Or a specific region/multi-region
   uniform_bucket_level_access = true
   force_destroy               = false # Set to true for easier deletion during dev/test, but be cautious!
@@ -52,7 +52,7 @@ resource "google_storage_bucket" "destination_dags_bucket" {
 resource "google_storage_bucket_object" "destination_dags_folder" {
   name    = var.gcs_destination_dags_folder
   content = " " # Space is sufficient to create an empty folder prefix in GCS
-  bucket  = var.gcs_destination_bucket_name
+  bucket  = local.destination_bucket_name
   depends_on = [google_storage_bucket.destination_dags_bucket]
 }
 
