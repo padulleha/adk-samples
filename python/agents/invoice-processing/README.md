@@ -239,7 +239,7 @@ The diagram above illustrates the three-zone architecture of the Invoice Process
 ### Folder Structure
 
 ```
-invoice_processing/
+invoice-processing/
 ├── invoice_processing/                      # Python package (fully self-contained)
 │   ├── __init__.py                 # Exports root_agent
 │   ├── agent.py                    # LlmAgent + run_inference pipeline + root_agent
@@ -301,7 +301,7 @@ invoice_processing/
 
 ```bash
 # Navigate to the agent directory
-cd agents/invoice_processing
+cd agents/invoice-processing
 
 # Install dependencies using uv
 uv sync
@@ -432,13 +432,13 @@ The evaluation framework lives in [`eval/`](eval/) and provides schema-driven as
 ```bash
 # Full evaluation (deterministic + LLM)
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output
 
 # Deterministic only (no LLM, no cost)
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output \
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output \
     --skip-llm
 
 # Single case evaluation
@@ -446,12 +446,12 @@ uv run eval/eval.py --case case_001
 
 # Custom financial tolerance
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output \
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output \
     --tolerance 0.05
 
 # Compare original vs ALF-revised output (before/after diff)
-python agents/invoice_processing/eval/compare_postprocessing.py
+python agents/invoice-processing/eval/compare_postprocessing.py
 ```
 
 Results are saved to `invoice_processing/data/eval_results/`.
