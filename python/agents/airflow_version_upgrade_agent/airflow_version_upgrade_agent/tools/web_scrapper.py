@@ -31,7 +31,7 @@ load_dotenv(dotenv_path=env_file_path)
 
 # Fetch Data Store configs from env
 location = os.getenv("VERTEX_SEARCH_LOCATION", "global")
-app_id = os.getenv("VERTEX_APP_ID")
+app_id = os.getenv("VERTEX_AI_SEARCH_APP_ID")
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -133,10 +133,10 @@ def research_operator_documentation(
 #     # Ensure these are loading correctly from your .env
 #     test_project_id = os.getenv("PROJECT_ID")
 #     test_location = os.getenv("VERTEX_SEARCH_LOCATION", "global")
-#     test_app_id = os.getenv("VERTEX_APP_ID")
+#     test_app_id = os.getenv("VERTEX_AI_SEARCH_APP_ID")
 
 #     if not test_project_id or not test_app_id:
-#         print("ERROR: Missing PROJECT_ID or VERTEX_APP_ID in .env file.")
+#         print("ERROR: Missing PROJECT_ID or VERTEX_AI_SEARCH_APP_ID in .env file.")
 #         exit(1)
 
 #     print(f"Testing Vertex AI Search for operator: {test_operator}...")

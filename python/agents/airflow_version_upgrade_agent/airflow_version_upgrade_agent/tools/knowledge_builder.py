@@ -14,12 +14,11 @@
 
 
 import logging
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import build_bq_corpus, dag_parser, web_scrapper
+from . import build_bq_corpus, dag_parser, datastore_manager, web_scrapper
 
 # Define the path to the .env file
 env_file_path = Path(__file__).parent.parent / ".env"
@@ -46,6 +45,7 @@ def run_pipeline(
     1. Extracts unique Airflow operators from Python files in a GCS folder.
     2. Researches documentation for each operator using a web scraper.
     3. Processes the scraped content with an LLM and stores it in BigQuery.
+    4. Refreshes the Vertex AI Search Datastore to reflect the latest BQ updates.
 
     Args:
         gcs_folder_uri (str): The GCS URI of the folder containing Airflow DAG files.
@@ -58,7 +58,7 @@ def run_pipeline(
     """
     print("Step 1: Extracting operators from GCS...")
     operators = dag_parser.extract_operators_from_gcs(gcs_folder_uri)
-    print(f"Found {operators} unique operators.")
+    print(f"Found {len(operators)} unique operators.")
     if not operators:
         return "No operators found to process."
 
@@ -79,12 +79,22 @@ def run_pipeline(
         research_results=research_results,
         source_version=source_version,
         target_version=target_version,
+        project_id=project_id,
     )
+    if "ERROR" in completion_message or "WARNING" in completion_message:
+        return completion_message
 
-    print(
-        f"Pipeline completed successfully, your knowledege base has been updated in {os.getenv('BIGQUERY_TABLE')}"
-    )
-    return completion_message
+    print("Step 4: Triggering Vertex AI Datastore refresh...")
+    success = datastore_manager.refresh_vertex_datastore(project_id=project_id)
+
+    if not success:
+        print(
+            "Warning: Vertex AI Datastore refresh encountered an error. See logs."
+        )
+
+    final_msg = "Pipeline completed successfully. Your knowledge base and Agent Datastore are now up to date."
+    print(final_msg)
+    return final_msg
 
 
 # if __name__ == '__main__':

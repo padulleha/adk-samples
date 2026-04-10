@@ -35,7 +35,7 @@ print(env_file_path)
 load_dotenv(dotenv_path=env_file_path)
 
 PROJECT_ID = os.getenv("PROJECT_ID")
-LOCATION = os.getenv("VERTEX_SEARCH_LOCATION", "global")
+VERTEX_SEARCH_LOCATION = os.getenv("VERTEX_SEARCH_LOCATION", "global")
 
 
 def convert_dags(
@@ -44,7 +44,6 @@ def convert_dags(
     source_version: str,
     target_version: str,
     project_id: str,
-    bq_collection_id: str,
     bq_data_store_id: str,
 ) -> str:
     """
@@ -56,22 +55,30 @@ def convert_dags(
         destination_gcs_uri (str): The GCS URI of the folder where converted DAGs will be saved.
         source_version (str): The source Airflow version.
         target_version (str): The target Airflow version.
-        bq_collection_id (str): The ID of the Vertex AI Search collection for BigQuery.
+        project_id (str): The Google Cloud project ID.
         bq_data_store_id (str): The ID of the Vertex AI Search datastore for BigQuery.
 
     Returns:
         str: A message indicating the completion of the DAG conversion.
     """
-    if not PROJECT_ID or not LOCATION:
+    if not PROJECT_ID or not VERTEX_SEARCH_LOCATION:
         logging.error(
             "Environment variables 'PROJECT_ID' and 'VERTEX_SEARCH_LOCATION' must be set in your .env file."
         )
         return "DAG conversion failed: Missing environment configuration."
     try:
         storage_client = storage.Client()
-        vertex_ai_search_data_store_path = f"projects/{PROJECT_ID}/locations/{LOCATION}/collections/{bq_collection_id}/dataStores/{bq_data_store_id}"
+
+        # Hardcode "default_collection" here. It is the required standard for Vertex Search.
+        vertex_ai_search_data_store_path = (
+            f"projects/{PROJECT_ID}/locations/{VERTEX_SEARCH_LOCATION}"
+            f"/collections/default_collection/dataStores/{bq_data_store_id}"
+        )
+
         client = genai.Client(
-            vertexai=True, project=project_id, location="global"
+            vertexai=True,
+            project=project_id,
+            location="us-central1",  # Recommended to use regional endpoint for Vertex GenAI
         )
 
         logging.info(
@@ -114,7 +121,7 @@ def convert_dags(
 
             try:
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",  # Change if needed
+                    model="gemini-2.5-flash",
                     contents=prompt,
                     config=GenerateContentConfig(
                         tools=[

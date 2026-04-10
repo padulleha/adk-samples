@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "google_bigquery_dataset" "migration_kb" {
-  project    = var.project_id
+  project    = local.project_id
   dataset_id = var.bigquery_dataset_id
   location   = "US" # Match this to your Vertex AI Search Data Store location if regional
   description = "Dataset for Airflow migration knowledge base."
@@ -24,7 +24,7 @@ resource "google_bigquery_dataset" "migration_kb" {
 }
 
 resource "google_bigquery_table" "migration_corpus" {
-  project    = var.project_id
+  project    = local.project_id
   dataset_id = google_bigquery_dataset.migration_kb.dataset_id
   table_id   = var.bigquery_table_id
   description = "A knowledge base for migrating Apache Airflow operators between versions, populated by an AI agent."
