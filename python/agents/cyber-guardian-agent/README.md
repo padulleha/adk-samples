@@ -230,8 +230,7 @@ The Cyber Guardian Agent is designed for seamless onboarding to the **Google Clo
 
 This approach eliminates the need for manual Dockerfile maintenance or custom environment-specific deployment scripts in your repository.
 
-> [!IMPORTANT]
-> **Deployment Scope**: The first phase of Agent Garden onboarding is intended for **self-contained agents**. The agent should leverage existing workspace triggers and external data surfaces (like existing BigQuery datasets) rather than full infrastructure deployment orchestrations.
+
 
 ---
 
@@ -299,4 +298,58 @@ make test
 
 After successfully building the `uv` locking layer and packaging verification, your agent is bundle-ready. The Agent Garden Console consumes the injected template mapping configurations inside `pyproject.toml` to provision the agent in the customer tenant project safely and effectively.
 
+---
 
+## G. Testing the Deployed Agent
+
+After successfully deploying the Cyber Guardian Agent, you can test it using one of the following methods depending on your deployment target.
+
+### Option 1: Web Interface (If deployed to Cloud Run with UI)
+
+If you deployed the agent to Cloud Run with the UI enabled, you can interact with it directly in your browser:
+
+1. Locate the Cloud Run service URL from the deployment output or the Google Cloud Console.
+2. Open the URL in your browser.
+3. Paste one of the sample inputs from `sample_input.txt` into the chat box to trigger the investigation workflow.
+
+### Option 2: Testing via cURL (Cloud Run Endpoint)
+
+If the agent is deployed as a web service on Cloud Run, you can test it by sending a POST request to the endpoint.
+
+```bash
+curl -X POST https://YOUR_CLOUD_RUN_URL/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \
+  -d '{
+    "message": "SCH_SR_Falcon_Detection/Host:winsrv0221\n\nUser system on Host winsrv0221 Which is a WINDOWS Server 2022 Server with an IP of 10.20.3.16 alerted for A suspicious process tree was observed. Host Impacted: winsrv0221 User Impacted: system.\nIOC: 45.146.164.110 (IP)"
+  }'
+```
+
+*Note: Replace `https://YOUR_CLOUD_RUN_URL` with your actual service URL. The endpoint might be `/predict` or `/chat` depending on your setup.*
+
+### Option 3: Testing via Vertex AI SDK (If deployed as Reasoning Engine)
+
+If you deployed the agent to Vertex AI Reasoning Engine (Agent Engine), you can test it using the Python SDK:
+
+```python
+from google.cloud import aiplatform
+
+# Initialize the SDK
+aiplatform.init(
+    project="YOUR_PROJECT_ID",
+    location="YOUR_LOCATION"
+)
+
+# Load the remote agent
+# Replace RESOURCE_ID with your deployed reasoning engine ID
+remote_agent = aiplatform.ReasoningEngine(
+    "projects/YOUR_PROJECT_ID/locations/YOUR_LOCATION/reasoningEngines/RESOURCE_ID"
+)
+
+# Test the agent
+response = remote_agent.predict(
+    input="SCH_SR_Falcon_Detection/Host:winsrv0221 ... (paste full alert text)"
+)
+
+print(response)
+```

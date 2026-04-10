@@ -12,7 +12,6 @@ This agent has several important limitations to be aware of:
 - **No Open-ended Searches**: You cannot ask for trends on specific topics (e.g., "trending terms about AI agents") if they aren't already ranked as top terms in the dataset.
 - **Regional Limitations**: Only regions included in the BigQuery dataset are available.
 
-
 ## Agent Architecture
 
 This diagram shows the detailed architecture of the agents and tools used to implement this workflow.
@@ -22,26 +21,26 @@ This diagram shows the detailed architecture of the agents and tools used to imp
 
 This agent is a sequential agent composed of two sub-agents that work together to fetch and analyze Google Trends data. The first sub-agent, `TrendsQueryGeneratorAgent`, generates a BigQuery SQL query from the user's request. The second sub-agent, `TrendsQueryExecutorAgent`, executes this query to retrieve the trends data and present it to the user. This modular design can be extended with more complex, multi-agent workflows.
 
-| Feature | Description |
-| --- | --- |
-| **Interaction Type** | Conversational |
-| **Complexity** | Medium |
-| **Agent Type** | Sequential Agent |
-| **Components** | Tools: BigQuery |
-| **Vertical** | Marketing & Analytics |
+| Feature              | Description           |
+| -------------------- | --------------------- |
+| **Interaction Type** | Conversational        |
+| **Complexity**       | Medium                |
+| **Agent Type**       | Sequential Agent      |
+| **Components**       | Tools: BigQuery       |
+| **Vertical**         | Marketing & Analytics |
 
--   **Core Logic:** The agent's main logic is defined in `google_trends_agent/agent.py`.
--   **Tools:** It utilizes tools to query the public [Google Trends dataset on BigQuery](https://support.google.com/trends/answer/12764470?hl=en) to fetch trending data. You can explore querying the [Google Trends dataset](https://console.cloud.google.com/marketplace/product/bigquery-public-datasets/google-search-trends) in Google Cloud Console.
--   **Dependencies:** Key dependencies include `google-cloud-aiplatform` for the ADK and agent engine deployment, `google-cloud-bigquery` and `pandas` for data handling.
+- **Core Logic:** The agent's main logic is defined in `google_trends_agent/agent.py`.
+- **Tools:** It utilizes tools to query the public [Google Trends dataset on BigQuery](https://support.google.com/trends/answer/12764470?hl=en) to fetch trending data. You can explore querying the [Google Trends dataset](https://console.cloud.google.com/marketplace/product/bigquery-public-datasets/google-search-trends) in Google Cloud Console.
+- **Dependencies:** Key dependencies include `google-cloud-aiplatform` for the ADK and agent engine deployment, `google-cloud-bigquery` and `pandas` for data handling.
 
 ## Setup and Installation
 
 1.  **Prerequisites**
 
-    *   Python 3.11+
-    *   [Poetry](https://python-poetry.org/docs/) for dependency management.
-    *   A Google Cloud Platform project.
-    *   The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
+    - Python 3.11+
+    - Install [uv](https://docs.astral.sh/uv/)
+    - A Google Cloud Platform project.
+    - The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
 
 2.  **Installation**
 
@@ -49,53 +48,57 @@ This agent is a sequential agent composed of two sub-agents that work together t
     # Navigate to the agent's directory
     cd adk-samples/python/agents/google-trends-agent
     # Install the package and dependencies.
-    poetry install
+    uv sync --dev
     ```
 
 3.  **Configuration**
 
-    *   Set up your Google Cloud credentials. You can set these in your shell or create a `.env` file in the agent's root directory (`google-trends-agent/`).
+    - Set up your Google Cloud credentials. You can set these in your shell or create a `.env` file in the agent's root directory (`google-trends-agent/`).
 
-        ```bash
-        # Authenticate your gcloud account
-        gcloud auth application-default login
-        gcloud auth application-default set-quota-project <your-project-id>
+      ```bash
+      # Authenticate your gcloud account
+      gcloud auth application-default login
+      gcloud auth application-default set-quota-project <your-project-id>
 
-        # Create and populate .env file
-        cp .env.example .env
-        ```
+      # Create and populate .env file
+      cp .env.example .env
+      ```
 
-    *   Edit the `.env` file with your specific configuration:
-        ```env
-        GOOGLE_CLOUD_PROJECT="<your-project-id>"
-        GOOGLE_CLOUD_LOCATION="<your-project-location>"
-        GOOGLE_CLOUD_STORAGE_BUCKET="<your-storage-bucket>" # Required for deployment
-        ```
+    - Edit the `.env` file with your specific configuration:
 
-    *   Grant the Agent Engine service account permission to run BigQuery jobs. This is required for deployment.
-        ```bash
-        # Set your project ID
-        export PROJECT_ID="<your-project-id>"
+      ```env
+      GOOGLE_CLOUD_PROJECT="<your-project-id>"
+      GOOGLE_CLOUD_LOCATION="<your-project-location>"
+      GOOGLE_CLOUD_STORAGE_BUCKET="<your-storage-bucket>" # Required for deployment
+      ```
 
-        # Get your project number
-        export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+    - Grant the Agent Engine service account permission to run BigQuery jobs. This is required for deployment.
 
-        # Grant the Agent Engine service account permission to run BigQuery jobs
-        gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-            --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
-            --role="roles/bigquery.user"
-        ```
+      ```bash
+      # Set your project ID
+      export PROJECT_ID="<your-project-id>"
+
+      # Get your project number
+      export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+
+      # Grant the Agent Engine service account permission to run BigQuery jobs
+      gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+          --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
+          --role="roles/bigquery.user"
+      ```
 
 ## Running the Agent Locally
 
 You can run the agent locally using the `adk` command in your terminal.
 
 1.  **Activate the virtual environment:**
+
     ```bash
     poetry shell
     ```
 
 2.  **To run the agent from the CLI:**
+
     ```bash
     adk run .
     ```
@@ -136,6 +139,7 @@ The agent can also be deployed to [Vertex AI Agent Engine](https://cloud.google.
 **User:** List the top 10 terms in Canada during the past 3 weeks
 
 **[TrendsQueryGeneratorAgent]:**
+
 ```sql
 SELECT
   term,
@@ -176,11 +180,34 @@ The top terms in Canada for the week of 2025-07-13 are:
 7.  france vs germany
 8.  усик дюбуа
 
-
 ## Customization
 
 You can customize this agent to fit your specific needs:
 
-*   **Change Data Source:** Modify the agent's tools to pull trend data from different sources, such as social media APIs or other analytics platforms.
-*   **Enhance Analysis:** Add new tools to perform more in-depth analysis on the trends, deeper research (e.g. using Google Search as an additional tool) such as sentiment analysis or forecasting.
-*   **Add Notifications:** Integrate tools that send alerts via email or Slack when a new trend matching specific criteria is detected.
+- **Change Data Source:** Modify the agent's tools to pull trend data from different sources, such as social media APIs or other analytics platforms.
+- **Enhance Analysis:** Add new tools to perform more in-depth analysis on the trends, deeper research (e.g. using Google Search as an additional tool) such as sentiment analysis or forecasting.
+- **Add Notifications:** Integrate tools that send alerts via email or Slack when a new trend matching specific criteria is detected.
+
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-google-trends-agent -a adk@google-trends
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-google-trends-agent -a adk@google-trends
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
