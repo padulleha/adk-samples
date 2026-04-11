@@ -5,6 +5,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+import pandas as pd
+import pandas_gbq
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 logging.basicConfig(level=logging.INFO)
