@@ -8,9 +8,9 @@ The goal of this agent is to show how the agent decomposes a single complex goal
 
 **Example Use Cases:**
 
-*   Sending an "all-hands" meeting announcement to multiple Slack channels, a company-wide email, and creating a corresponding calendar event.
-*   Broadcasting a critical incident report (e.g., "Service X outage, estimated fix in 2 hours") to relevant engineering channels and an internal status email.
-*   Pushing a product update notification to key team channels.
+* Sending an "all-hands" meeting announcement to multiple Slack channels, a company-wide email, and creating a corresponding calendar event.
+* Broadcasting a critical incident report (e.g., "Service X outage, estimated fix in 2 hours") to relevant engineering channels and an internal status email.
+* Pushing a product update notification to key team channels.
 
 ---
 > **Note on Tools: For Inspiration, Not Production**
@@ -57,22 +57,17 @@ The goal of this agent is to show how the agent decomposes a single complex goal
     cd adk-samples/python/agents/parallel_task_decomposition_execution
     ```
 
-    Install [Poetry](https://python-poetry.org)
-
-    If you have not installed poetry before, you can do so by running:
+    Install [uv](https://docs.astral.sh/uv/)
+    If you have not installed uv before, you can do so by running:
     ```bash
-    pip install poetry
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
     Install the agent's requirements:
 
-    **Note for Linux users:** If you get an error related to `keyring` during the installation, you can disable it by running the following command:
-    ```bash
-    poetry config keyring.enabled false
-    ```
     This is a one-time setup.
     ```bash
-    poetry install
+    uv sync --dev
     ```
 
     This will also install the released version of 'google-adk', the Google Agent Development Kit.
@@ -121,7 +116,6 @@ The logs from the agent will display on the console in real time as it runs.
 
 Begin the interaction by typing "Hello". The agent will then prompt you for a topic. Add in a topic that you'd like to research and then broadcast to your team across multiple communication channels.
 
-
 ## Disclaimer
 
 This agent sample is provided for illustrative purposes only and is not intended for production use. It serves as a basic example of an agent and a foundational starting point for individuals or teams to develop their own agents.
@@ -129,3 +123,26 @@ This agent sample is provided for illustrative purposes only and is not intended
 This sample has not been rigorously tested, may contain bugs or limitations, and does not include features or optimizations typically required for a production environment (e.g., robust error handling, security measures, scalability, performance considerations, comprehensive logging, or advanced configuration options).
 
 Users are solely responsible for any further development, testing, security hardening, and deployment of agents based on this sample. We recommend thorough review, testing, and the implementation of appropriate safeguards before using any derived agent in a live or critical system.
+
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-parallel-task-decomposition -a adk@parallel-task-decomposition-execution
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-parallel-task-decomposition -a adk@parallel-task-decomposition-execution
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
