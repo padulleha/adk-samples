@@ -31,8 +31,6 @@ The Cyber Guardian Agent leverages a **hierarchical multi-agent architecture** b
 *   **Threat Intel Agent**: Performs batch lookups on file hashes, IPs, and domains against a threat intelligence knowledge base.
 *   **Response Agent**: Maps findings to predefined playbooks and recommends surgical response actions.
 
-#### 🤝 4. Human-In-The-Loop (HITL) Safety
-*   **Guardrails**: Critical response actions (e.g., host isolation) are flagged to require explicit approval, ensuring that automation supports rather than replaces expert judgment.
 
 ---
 
@@ -46,32 +44,32 @@ The Cyber Guardian Agent leverages a **hierarchical multi-agent architecture** b
 
 ### 🛠️ Prerequisites & Installation
 
-Follow these steps to set up the environment and prepare the agent for execution.
+Follow these steps to set up the environment, authenticate, and run the agent.
 
 **1. Clone the Repository**
+This agent is part of the `adk-samples` repository. You can clone the repository and navigate to the agent directory:
 ```bash
-git clone <your-repo-url>
-cd cyber_guardian
+git clone https://github.com/google/adk-samples.git
+cd adk-samples/python/agents/cyber-guardian-agent
 ```
+*(Note: If you are already in this directory, you can skip this step).*
 
-**2. Python Environment Setup**
-Ensure you have **Python 3.10+** and **uv** installed.
-```bash
-# Install the package and dependencies
-uv sync --dev
-```
-
-**3. Google Cloud Authentication**
-The agent requires access to BigQuery. Authenticate your local environment:
+**2. Google Cloud Authentication**
+The agent requires access to BigQuery and Vertex AI. Authenticate your local environment:
 ```bash
 gcloud auth application-default login
 ```
 
----
+**3. Python Environment Setup**
+Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-### 📄 Configuration (.env)
-
-The agent uses environment variables for project-specific configurations. A `.env` file should be located at `cyber_guardian/.env`.
+**4. Configure Environment Variables (.env)**
+The agent uses environment variables for project-specific configurations. Create a `.env` file inside the cyber guardian folder
+You can copy the .env.example file and update the values. 
 
 **Example `.env` configuration:**
 ```env
@@ -80,41 +78,12 @@ GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 GOOGLE_CLOUD_LOCATION="your-gcp-region"
 BQ_DATASET="<your_bq_dataset>"
 MODEL_ID="model_id"
-
 ```
 
 > [!IMPORTANT]
-> Ensure `GOOGLE_CLOUD_PROJECT` matches your actual GCP project ID where the BigQuery tables are hosted.
+> Ensure `GOOGLE_CLOUD_PROJECT` matches your actual GCP project ID where the BigQuery tables are hosted. 
 
----
-
-### 📊 Optional: Populate BigQuery Tables
-
-If you are setting up the environment for the first time, you can populate the required BigQuery tables using the provided CSV files in the `sample_data/` directory.
-
-> [!NOTE]
-> The data in `sample_data/` is synthetically generated for demonstration purposes.
-
-
-**1. Create the BigQuery Dataset**
-```bash
-# Ensure environment variables are set or replaced directly
-bq --location=US mk --dataset ${GOOGLE_CLOUD_PROJECT}:${BQ_DATASET}
-```
-
-**2. Load Data from CSV Files**
-```bash
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.asset_inventory ./sample_data/asset_inventory.csv
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.endpoint_process_events ./sample_data/endpoint_process_events.csv
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.incident_management ./sample_data/incident_management.csv
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.network_connection_log ./sample_data/network_connection_log.csv
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.response_playbooks ./sample_data/response_playbooks.csv
-bq load --autodetect --source_format=CSV ${BQ_DATASET}.threat_intelligence_kb ./sample_data/threat_intelligence_kb.csv
-```
-
----
-
-### 🚀 Running the Agent
+**5. Running the Agent
 
 You can interact with the Cyber Guardian Agent through a web interface or directly via the command line.
 
@@ -135,221 +104,15 @@ adk run cyber_guardian:root_agent --input "Raw alert text here..."
 ```bash
 adk run cyber_guardian:root_agent --input "IOC_Match: hostname: kvm01, user: admin, ip_address: 192.168.1.50, IOC: high_risk_hash_123 ........."
 ```
-
-#### 🧪 Using Sample Inputs for Testing
-
-You can use the examples provided in `sample_input.txt` to test the agent via CLI or Web UI.
-
-> [!NOTE]
-> The inputs in `sample_input.txt` are synthetically generated for demonstration.
-
-### Alternative: Using Agent Starter Pack
-
-You can also use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options:
-
-```bash
-# Create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate
-
-# Install the starter pack and create your project
-pip install --upgrade agent-starter-pack
-agent-starter-pack create my-cyber-guardian -a local@.
-```
-
-<details>
-<summary>⚡️ Alternative: Using uv</summary>
-
-If you have [`uv`](https://github.com/astral-sh/uv) installed, you can create and set up your project with a single command:
-```bash
-uvx agent-starter-pack create my-cyber-guardian -a local@.
-```
-This command handles creating the project without needing to pre-install the package into a virtual environment.
-
-</details>
-
 ---
 
-## D. Customization & Extension
 
-The Cyber Guardian Agent is designed to be extensible. Whether you want to add new investigation capabilities or change the underlying data sources, here is how you can hack on the project.
+#### 🧪 Testing with Sample Inputs
+You can make use of the sample inputs available in `sample_input.txt` for testing the agent in the ADK web interface.
+Open `sample_input.txt` to find examples like:
+*   **Sample Input 1**: EDR Detection (New - Malicious PowerShell)
+*   **Sample Input 2**: IOC Match (New - Malicious IP)
+*   **Sample Input 3**: Phishing Email (New - Malicious Domain)
 
-### 🧠 1. Modifying the Agent Flow & Logic
+Copy the raw alert text or the content described in the sample input and paste it into the chat input of the ADK web UI to see how the agent orchestrates the sub-agents and tools to handle the incident.
 
-The intelligence and routing logic of the system are determined by the orchestrator.
-
-*   **Tweak Prompts**: To change how agents behave or interpret alerts, edit the instructions in `cyber_guardian/prompt.py` (for the Orchestrator) or the `prompt.py` files within each sub-agent directory (e.g., `cyber_guardian/sub_agents/triage/prompt.py`).
-*   **Alter Orchestration**: The root agent definition and its sub-agent list are located in `cyber_guardian/agent.py`. Adjust the `sub_agents` list or the agent's model selection here.
-*   **Add New Intents**: If you want the agent to handle new types of alerts (e.g., "Network Anomaly"), update the "Step 1: Parse & Classify" section in `cyber_guardian/prompt.py`.
-
-### 🛠️ 2. Adding New Tools & APIs
-
-The agents interact with the world through Python function tools.
-
-*   **Define Functions**: Create new Python functions in `cyber_guardian/tools.py`. These functions should return JSON-serializable strings for the agents to consume.
-*   **Plug in External APIs**: You can easily integrate tools for Virustotal, CrowdStrike, or Jira by adding their SDK calls within a new tool function.
-*   **Register Tools**: To make a tool available to an agent, import it into the relevant agent's file (e.g., `sub_agents/investigation/agent.py`) and add it to the `tools` list via `FunctionTool(your_new_tool)`.
-
-### 📊 3. Changing Data Sources (RAG)
-
-The agent currently treats BigQuery as its primary source of truth (RAG).
-
-*   **Switch Datasets**: You can point the entire system to a different BigQuery dataset by updating the `BQ_DATASET` variable in your `.env` file.
-*   **Modify Database Queries**: If your schema differs from the default, update the SQL queries within the tool functions in `cyber_guardian/tools.py`.
-*   **Use Different Backends**: While optimized for BigQuery, you can swap the database logic in `tools.py` to query Elasticsearch, Splunk, or local JSON/CSV files by changing the internally called Python libraries.
-
----
-
-## E. Evaluation
-
-Ensuring the reliability and accuracy of the Cyber Guardian Agent is critical before deploying it in a live SecOps environment. While the Agent Development Kit (ADK) focuses on agent orchestration, we implement a custom evaluation framework located in the `/eval/` directory.
-
-### 🧪 Evaluation Methodology
-
-Our evaluation methodology treats the multi-agent system as a complete pipeline, measuring its performance against a curated dataset of historical alerts ("ground truth" dataset). We evaluate both the intermediate steps (sub-agent performance) and the final outcome (orchestrator synthesis).
-
-**The process involves:**
-1.  **Dataset Ingestion**: Feeding a test suite of raw alerts (Phishing, EDR triggers, IOC matches, and benign anomalies) into the system.
-2.  **Execution Logging**: Tracing the agent's routing decisions, tool calls, and payload arguments.
-3.  **Assertion Checking**: Comparing the agent's generated response plan and derived IOCs against manually verified analyst playbooks.
-
-### 📈 Key Metrics
-
-When running evaluations, we care about the following metrics:
-*   **Routing Accuracy**: Did the Orchestrator choose the correct sub-agent path (e.g., calling Threat Intel *before* Investigation for an IOC alert)?
-*   **Entity Extraction Recall**: Did the agents successfully extract all relevant entities (IPs, hashes, hostnames) from the raw text to pass into the Python tools?
-*   **False Positive Rate (FPR)**: How often did the system recommend a disruptive action (e.g., host isolation) for a benign or duplicate alert?
-*   **Tool Execution Success Target**: What percentage of BigQuery tool invocations resulted in valid SQL execution vs. malformed queries or API errors?
-
----
-
-## F. Deploy
-
-### 🚀 Agent Garden & Starter Pack Integration
-
-The Cyber Guardian Agent is designed for seamless onboarding to the **Google Cloud Agent Garden** ecosystem. It utilizes the **Agent Starter Pack** to generate automated deployment scripts, allowing the agent to be deployed quickly across various Google Cloud compute environments (such as **Cloud Run, App Engine, and GKE**).
-
-This approach eliminates the need for manual Dockerfile maintenance or custom environment-specific deployment scripts in your repository.
-
-
-
----
-
-### 🛠️ Prerequisites
-
-To prepare the agent for deployment via the Agent Starter Pack:
--   **Python 3.10+**
--   **`uv` Package Manager** (Required for lock file generation)
--   **Gemini CLI** (For automated adaptation)
-
----
-
-### 🤖 Automated Adaptation with Gemini CLI
-
-The integration process uses the **Gemini CLI** to adapt your workspace structure and inject required Starter Pack templates.
-
-1.  **Open Gemini CLI** in your workspace.
-2.  **Submit the following prompt template** to adapt the codebase:
-
-```text
-Your task is to adapt this ADK agent for integration with the Agent Starter Pack.
-
-1. Modify pyproject.toml:
-   - Convert all dependencies to the uv standard using [project] and [project.optional-dependencies].
-   - Add the [tool.agent-starter-pack] metadata section.
-   - Add 'agent-starter-pack' as a dev dependency.
-
-2. Update Agent Source Code:
-   - Add the flexible authentication block to the main agent Python file.
-
-3. Update Documentation:
-   - In README.md, replace existing setup instructions with `uv sync --dev` and add the "Alternative: Using Agent Starter Pack" section.
-
-4. Generate Lock File:
-   - Execute `uv lock` to generate the `uv.lock` file.
-```
-
----
-
-### 🧪 Local Verification
-
-Before releasing the agent for Agent Garden onboarding, verify the lockfile and package compiling step locally.
-
-**1. Create a workspace package:**
-```bash
-uvx agent-starter-pack create cyber-guardian-deploy -a local@. --auto-approve -o target
-```
-
-**2. Install and Test:**
-```bash
-cd target/cyber-guardian-deploy
-make install
-make test
-```
-
-> [!TIP]
-> **Code Quality Workflow**: Successfully integrating with the Starter Pack automatically provides a non-blocking code quality reporting trigger. You can run the linter local checks with:
-> ```bash
-> make lint
-> ```
-
----
-
-### 📦 Production Rollout
-
-After successfully building the `uv` locking layer and packaging verification, your agent is bundle-ready. The Agent Garden Console consumes the injected template mapping configurations inside `pyproject.toml` to provision the agent in the customer tenant project safely and effectively.
-
----
-
-## G. Testing the Deployed Agent
-
-After successfully deploying the Cyber Guardian Agent, you can test it using one of the following methods depending on your deployment target.
-
-### Option 1: Web Interface (If deployed to Cloud Run with UI)
-
-If you deployed the agent to Cloud Run with the UI enabled, you can interact with it directly in your browser:
-
-1. Locate the Cloud Run service URL from the deployment output or the Google Cloud Console.
-2. Open the URL in your browser.
-3. Paste one of the sample inputs from `sample_input.txt` into the chat box to trigger the investigation workflow.
-
-### Option 2: Testing via cURL (Cloud Run Endpoint)
-
-If the agent is deployed as a web service on Cloud Run, you can test it by sending a POST request to the endpoint.
-
-```bash
-curl -X POST https://YOUR_CLOUD_RUN_URL/chat \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \
-  -d '{
-    "message": "SCH_SR_Falcon_Detection/Host:winsrv0221\n\nUser system on Host winsrv0221 Which is a WINDOWS Server 2022 Server with an IP of 10.20.3.16 alerted for A suspicious process tree was observed. Host Impacted: winsrv0221 User Impacted: system.\nIOC: 45.146.164.110 (IP)"
-  }'
-```
-
-*Note: Replace `https://YOUR_CLOUD_RUN_URL` with your actual service URL. The endpoint might be `/predict` or `/chat` depending on your setup.*
-
-### Option 3: Testing via Vertex AI SDK (If deployed as Reasoning Engine)
-
-If you deployed the agent to Vertex AI Reasoning Engine (Agent Engine), you can test it using the Python SDK:
-
-```python
-from google.cloud import aiplatform
-
-# Initialize the SDK
-aiplatform.init(
-    project="YOUR_PROJECT_ID",
-    location="YOUR_LOCATION"
-)
-
-# Load the remote agent
-# Replace RESOURCE_ID with your deployed reasoning engine ID
-remote_agent = aiplatform.ReasoningEngine(
-    "projects/YOUR_PROJECT_ID/locations/YOUR_LOCATION/reasoningEngines/RESOURCE_ID"
-)
-
-# Test the agent
-response = remote_agent.predict(
-    input="SCH_SR_Falcon_Detection/Host:winsrv0221 ... (paste full alert text)"
-)
-
-print(response)
-```
