@@ -8,7 +8,7 @@ authors = [
     { name = "Kun Wang", email = "kunwk@google.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "google-adk>=1.27.4",
     "google-genai>=0.2.0",
@@ -25,7 +25,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest",
+    "pytest-asyncio>=0.23.0",
     "ruff>=0.4.6",
+    "agent-starter-pack>=0.32.0",
 ]
 
 [tool.ruff]
@@ -35,5 +37,14 @@ extend = "../../../pyproject.toml"
 known-first-party = ["youtube_analyst"]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.8.14,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.agent-starter-pack]
+example_question = "Find the top 5 videos about 'Generative AI' from the last month and plot their view counts."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "youtube_analyst"

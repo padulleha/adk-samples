@@ -92,10 +92,19 @@ class ERAAgent:
                     access_secret_version,
                 )
 
-                # We can hardcode the workshop project-maui for consistency
-                return access_secret_version(
-                    project_id="project-maui", secret_id=key_name
-                )
+                project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+                if not project_id:
+                    import google.auth
+
+                    try:
+                        _, project_id = google.auth.default()
+                    except Exception:
+                        pass
+
+                if project_id:
+                    return access_secret_version(
+                        project_id=project_id, secret_id=key_name
+                    )
             except Exception:
                 return None
 

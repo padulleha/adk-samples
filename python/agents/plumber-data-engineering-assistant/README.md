@@ -73,20 +73,36 @@ The core of Plumber is powered by the Agent Development Kit (ADK), which enables
    ```bash
    cd plumber/
    ```
-4. **Create and activate a virtual environment:**
+4. **Install dependencies and run the ADK web server:**
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-4. **Install the required dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. **Run the ADK web server:**
-   ```bash
-   adk web 
+   uv sync --dev
+   uv run adk web
    ```
 
+
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-plumber -a adk@plumber-data-engineering-assistant
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-plumber -a adk@plumber-data-engineering-assistant
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
 
 ## Security
 

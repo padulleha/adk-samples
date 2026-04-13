@@ -5,6 +5,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+import pandas as pd
+import pandas_gbq
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 logging.basicConfig(level=logging.INFO)
@@ -238,3 +241,77 @@ def createIncidentTool(alert_type: str, hostname: str, user: str, severity: str)
     except Exception as e:
         logger.error(f"Failed to create incident: {e}")
         return json.dumps({"status": "error", "message": str(e)})
+
+def init_bq_tables() -> None:
+    """
+    Checks if BQ tables are present; if not, creates dataset and tables from CSV files
+    using pandas and pandas_gbq, ensuring timestamp columns are parsed correctly.
+    """
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    dataset_name = os.environ.get("BQ_DATASET", "cyber_guardian_dataset")
+
+    if not project_id:
+        logger.warning("GOOGLE_CLOUD_PROJECT env var not set. Skipping BQ initialization.")
+        return
+
+    client = bigquery.Client(project=project_id)
+    dataset_id = f"{project_id}.{dataset_name}"
+
+    # Create dataset if it doesn't exist
+    dataset = bigquery.Dataset(dataset_id)
+    client.create_dataset(dataset, exists_ok=True)
+    logger.info(f"Dataset {dataset_id} ensured.")
+
+    # Path to CSV files
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_dir = os.path.abspath(os.path.join(current_dir, "..", "sample_data"))
+
+    if not os.path.exists(csv_dir):
+        logger.warning(f"CSV directory {csv_dir} does not exist. Skipping table creation.")
+        return
+
+    # List of columns identified as timestamps across your tables
+    timestamp_columns = [
+        "CreationTimestamp",
+        "EventTimestamp",
+        "log_timestamp"
+    ]
+
+    for filename in os.listdir(csv_dir):
+        if filename.endswith(".csv"):
+            table_name = filename[:-4]
+            destination_table = f"{dataset_name}.{table_name}"
+            table_ref = client.dataset(dataset_name).table(table_name)
+
+            try:
+                client.get_table(table_ref)
+                logger.info(f"Table {table_name} already exists.")
+            except NotFound:
+                logger.info(f"Table {table_name} not found. Reading CSV and loading data.")
+                csv_path = os.path.join(csv_dir, filename)
+
+                try:
+                    # 1. Read CSV into a pandas DataFrame
+                    df = pd.read_csv(csv_path)
+
+                    # 2. Explicitly cast known timestamp columns to datetime
+                    for col in timestamp_columns:
+                        if col in df.columns:
+                            # 'coerce' turns invalid parsing into NaT (Not a Time) rather than failing the whole script
+                            df[col] = pd.to_datetime(df[col], errors='coerce')
+                            logger.info(f"Converted '{col}' to datetime in table {table_name}.")
+
+                    # 3. Upload DataFrame to BigQuery
+                    pandas_gbq.to_gbq(
+                        df,
+                        destination_table=destination_table,
+                        project_id=project_id,
+                        if_exists='fail'
+                    )
+                    logger.info(f"Successfully loaded data into {table_name} via pandas_gbq.")
+                except Exception as e:
+                    logger.error(f"Failed to load data into {table_name}: {e}")
+
+
+# Run initialization on import
+init_bq_tables()

@@ -32,9 +32,15 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "google-adk[eval]>=1.5.0",
     "google-cloud-aiplatform[evaluation]>=1.93.0",
+    "agent-starter-pack>=0.32.0",
 ]
 deployment = [
     "absl-py>=2.2.1",
+]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6",
 ]
 
 [tool.ruff]
@@ -51,6 +57,12 @@ known-first-party = ["machine_learning_engineering"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.agent-starter-pack]
+example_question = "Execute the California housing prices task."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "machine_learning_engineering"
 
 [build-system]
 requires = ["hatchling"]

@@ -23,8 +23,7 @@ def deploy_era_to_vertex(project_id: str, location: str = "us-central1"):
         f"🚀 Initializing Modern Agent Engine Deployment for economic-research in {location}..."
     )
 
-    # AdkApp requires a staging_bucket to persist dependencies and serialized objects
-    # Defaulting to project_id-agent-engine-v16 which we saw was valid for project-maui
+    # Defaulting to standard naming pattern for staging buckets
     staging_bucket = os.getenv(
         "GOOGLE_CLOUD_STORAGE_BUCKET", f"gs://{project_id}-agent-engine-v16"
     )
@@ -77,9 +76,11 @@ if __name__ == "__main__":
 
     try:
         _, project = google.auth.default()
-        active_project = project or os.getenv(
-            "GOOGLE_CLOUD_PROJECT", "project-maui"
-        )
+        active_project = project or os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not active_project:
+            raise ValueError(
+                "Active GCP project could not be determined. Please set GOOGLE_CLOUD_PROJECT."
+            )
         deploy_era_to_vertex(project_id=active_project)
     except Exception as e:
         print(f"❌ Modern Deployment Failed: {e}")

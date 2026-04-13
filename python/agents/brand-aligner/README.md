@@ -11,22 +11,22 @@ Refer to the defensive publication on this topic titled [Rubric-Based Evaluation
 The agent utilizes the **Google Agent Developer Kit (ADK)** and follows a sequential chain of specialized agents:
 
 1. **`brand_aligner_agent` (Root/Planner)**:
-    * **Role**: Entry point for the user. It handles file uploads, searches for existing files in Google Cloud Storage (GCS), and formulates the execution plan.
-    * **Tools**: `save_artifacts_to_gcs_tool`, `search_user_files_tool`, `save_plan_to_state_tool`.
-    * **Next Step**: Transitions to the `guideline_processor_agent`.
+   * **Role**: Entry point for the user. It handles file uploads, searches for existing files in Google Cloud Storage (GCS), and formulates the execution plan.
+   * **Tools**: `save_artifacts_to_gcs_tool`, `search_user_files_tool`, `save_plan_to_state_tool`.
+   * **Next Step**: Transitions to the `guideline_processor_agent`.
 
 2. **`guideline_processor_agent`**:
-    * **Role**: Iterates through the selected guideline files one by one. It extracts structured criteria from documents (PDF, Markdown, Text).
-    * **Tools**: `guideline_processor_tool` (calls `GuidelineService`).
-    * **Next Step**: Transitions to the `asset_evaluator_agent`.
+   * **Role**: Iterates through the selected guideline files one by one. It extracts structured criteria from documents (PDF, Markdown, Text).
+   * **Tools**: `guideline_processor_tool` (calls `GuidelineService`).
+   * **Next Step**: Transitions to the `asset_evaluator_agent`.
 
 3. **`asset_evaluator_agent`**:
-    * **Role**: Iterates through the selected asset files (images/videos) one by one. It evaluates each asset against the processed guidelines using a multimodal model.
-    * **Tools**: `asset_evaluator_tool` (calls `EvalService`).
-    * **Next Step**: Transitions to the `summarizer_agent`.
+   * **Role**: Iterates through the selected asset files (images/videos) one by one. It evaluates each asset against the processed guidelines using a multimodal model.
+   * **Tools**: `asset_evaluator_tool` (calls `EvalService`).
+   * **Next Step**: Transitions to the `summarizer_agent`.
 
 4. **`summarizer_agent`**:
-    * **Role**: Aggregates the results from all evaluations and presents a final summary to the user.
+   * **Role**: Aggregates the results from all evaluations and presents a final summary to the user.
 
 ## Services & Logic
 
@@ -55,63 +55,98 @@ Before running or deploying the agent, you must configure the environment.
 
 1. **Copy the environment template:**
 
-    ```bash
-    cp .env.template .env
-    ```
+   ```bash
+   cp .env.template .env
+   ```
 
 2. **Configure `.env`:** Open the newly created `.env` file and fill in the required values (Project ID, Region, GCS Bucket, Model Name, etc.).
 
-### 2. Local Testing (ADK Web Interface)
+### 2. Agent Starter Pack (recommended)
 
-To test the agent locally using the ADK's built-in web interface:
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options.
 
-1. **Install Dependencies:**
-    This project uses `uv` for dependency management.
+```bash
+uvx agent-starter-pack create my-brand-aligner -a adk@brand-aligner
+```
 
-    ```bash
-    uv sync
-    ```
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
 
-2. **Run Tests:**
-    Execute the unit test suite to verify the agent's logic.
+```bash
+# Create and activate a virtual environment
+python -m venv .venv
+# Linux/macOS
+source .venv/bin/activate
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
 
-    ```bash
-    uv run pytest -v
-    ```
+# Install starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-brand-aligner -a adk@brand-aligner
+```
 
-3. **Run the Agent:**
-    This starts the local ADK web UI.
+</details>
 
-    ```bash
-    uv run adk web --log_level DEBUG
-    ```
+The starter pack guides you through setup options and generates a production-ready project structure.
 
-    Access the UI at `http://localhost:8000`.
+<details>
+<summary>Alternative: Local development from this sample repo (manual clone)</summary>
 
-### 3. Deployment to Agent Engine and Gemini Enterprise
+### 3. Local Testing (ADK Web Interface)
+
+1. Clone and move into the sample:
+
+   ```bash
+   git clone https://github.com/google/adk-samples.git
+   cd adk-samples/python/agents/brand-aligner
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   uv sync
+   ```
+
+3. Run tests:
+
+   ```bash
+   uv run pytest -v
+   ```
+
+4. Run the ADK web UI:
+
+   ```bash
+   uv run adk web --log_level DEBUG
+   ```
+
+   Access the UI at `http://localhost:8000`.
+
+### 4. Deployment to Agent Engine and Gemini Enterprise
 
 To deploy the agent to Agent Engine then register it with Gemini Enterprise:
 
 1. **Deploy the Agent:**
 
-    ```bash
-    uv run deployment/deploy.py
-    ```
+   ```bash
+   uv run deployment/deploy.py
+   ```
 
 2. **Register with Gemini Enterprise:**
 
 The `deployment/` directory contains essential scripts for managing the agent's registration and configuration with Gemini Enterprise.
 
-* **`config.sh`**: **CRITICAL**. This file contains all the variables required for Gemini Enterprise registration and deployment (e.g., Agent Engine ID, Service Account details). It relies on your local `.env` file for valuesEnsure this is configured correctly before running the registration script.
+* **`config.sh`**: **CRITICAL**. This file contains all the variables required for Gemini Enterprise registration and deployment (for example, Agent Engine ID and service account details). It relies on your local `.env` file for values. Ensure this is configured correctly before running the registration script.
 * **`ge_register.sh`**: Registers the deployed agent with Gemini Enterprise.
 * **`ge_unregister.sh`**: Unregisters the agent from Gemini Enterprise.
+
+</details>
 
 ## Configuration Reference
 
 The agent relies on the following key environment variables (defined in `.env`):
 
-* `MODEL_NAME`: The name of the generative model to use for agent reasoning and evaluation (e.g., `gemini-2.5-flash`).
+* `MODEL_NAME`: The name of the generative model to use for agent reasoning and evaluation (for example, `gemini-2.5-flash`).
 * `GCS_BUCKET_NAME`: The GCS bucket for storing artifacts and processed files.
 * `PROJECT_ID`: The Google Cloud Project ID.
-* `LOCATION`: The Google Cloud region (e.g., `us-central1`).
+* `LOCATION`: The Google Cloud region (for example, `us-central1`).
 * `AUTH_ID`, `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`: Authentication credentials for the OAuth2 flow (if running in standalone mode).

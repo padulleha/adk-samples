@@ -11,11 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
+import google.auth
 from dotenv import load_dotenv
-
-from . import agent, auth, models, services, tools, utils
 
 # Load environment variables from a .env file in the parent directory.
 # The override=True flag ensures that existing environment variables are updated.
 load_dotenv(override=True)
+_, project_id = google.auth.default()
+os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project_id)
+os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "global")
+os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "True")
+
+from . import agent

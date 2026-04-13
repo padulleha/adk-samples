@@ -6,7 +6,7 @@ from google.genai import types
 from .constants import MODEL
 from .prompts import AGENT_INSTRUCTIONS
 
-# Import root_agents from each subagent
+# Import root_agents from each subagent.
 from .sub_agents.dataflow_agent.agent import root_agent as dataflow_agent
 from .sub_agents.dataproc_agent.agent import root_agent as dataproc_agent
 from .sub_agents.dataproc_template_agent.agent import (

@@ -28,9 +28,15 @@ dev = [
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
     "google-adk[eval]>=1.0.0",
+    "agent-starter-pack>=0.14.1",
 ]
 deployment = [
     "absl-py>=2.2.1",
+]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6",
 ]
 
 [tool.ruff]
@@ -44,6 +50,12 @@ ignore = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["data_engineering_agent"]
+
+[tool.agent-starter-pack]
+example_question = "Enrich the new_york_taxi_trips.tlc_green_trips_2022 table by generating date and time features from the pickup_datetime column."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "data_engineering_agent"
 
 [build-system]
 requires = ["hatchling"]

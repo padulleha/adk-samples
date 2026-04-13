@@ -548,12 +548,36 @@ the following:
 If so, what are the ID columns? (e.g., `country`, `store`, `product`)
 
 
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-data-science -a adk@data-science
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-data-science -a adk@data-science
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
+
 ## Testing and Evaluation
 
 To run the test and evaluation code, you need a few additional dependencies. Run
 the following uv command from the `agents/data-science` directory to install them:
 ```bash
-uv sync
+uv sync --dev
 ```
 
 ### Running Evaluations

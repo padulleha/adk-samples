@@ -36,11 +36,9 @@ The tools are provided by custom APIs. The specifications are imported to [API h
 ### Prerequisites
 
 - Python 3.12+
--   Poetry for dependency management and packaging
-    -   See the official
-        [Poetry website](https://python-poetry.org/docs/) for more information. To install Poetry run:
+- [uv](https://docs.astral.sh/uv/) for dependency management:
     ```bash
-    pip install poetry
+    curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 - Google Cloud Project with the following roles assigned
   - Apigee Organization Admin
@@ -75,6 +73,32 @@ Follow the instructions in this GCP Cloud Shell tutorial.
 
 ## Agent Setup
 
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-auto-insurance-agent -a adk@auto-insurance-agent
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-auto-insurance-agent -a adk@auto-insurance-agent
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
+
+### Manual Setup
+
 1.  Clone the repository:
 
     ```bash
@@ -86,14 +110,8 @@ Follow the instructions in this GCP Cloud Shell tutorial.
 
 2.  Install the dependencies:
 
-    **Note for Linux users:** If you get an error related to `keyring` during the installation, you can disable it by running the following command:
     ```bash
-    poetry config keyring.enabled false
-    ```
-    This is a one-time setup.
-
-    ```bash
-    poetry install
+    uv sync --dev
     ```
 
 3.  Configure settings:
@@ -132,8 +150,8 @@ The agent can also be deployed to [Vertex AI Agent Engine](https://cloud.google.
 commands:
 
 ```bash
-poetry install --with deployment
-python3 deployment/deploy.py
+uv sync --group deployment
+uv run python3 deployment/deploy.py
 ```
 
 When the deployment finishes, it will output the resource ID of the remote agent deployment, for example:

@@ -17,7 +17,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "google-adk>=1.5.0,<2.0.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "google-adk[eval]>=1.0.0",
+    "agent-starter-pack>=0.32.0",
 ]
 deployment = [
     "absl-py>=2.2.2",
@@ -30,8 +33,16 @@ extend = "../../../pyproject.toml"
 [tool.ruff.lint.isort]
 known-first-party = ["auto_insurance_agent"]
 
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.agent-starter-pack]
+example_question = "I need to file a claim for my car accident."
+
 [tool.agent-starter-pack.settings]
 agent_directory = "auto_insurance_agent"
+deployment_targets = ["agent_engine", "cloud_run"]
 
 [build-system]
 requires = ["hatchling"]

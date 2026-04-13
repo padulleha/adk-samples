@@ -204,9 +204,71 @@ END
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.12+
 - Google Cloud Account with Vertex AI access
-- Required libraries: `google-adk`, `google-cloud-aiplatform`, `google-genai`, `tenacity`
+- [uv](https://docs.astral.sh/uv/) for dependency management:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+### Agent Starter Pack (Recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options. The easiest way is with `uvx` (no install needed):
+
+```bash
+uvx agent-starter-pack create my-ai-security-agent -a adk@ai-security-agent
+```
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-ai-security-agent -a adk@ai-security-agent
+```
+
+</details>
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
+
+### Manual Setup
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://github.com/google/adk-samples.git
+    cd python/agents/ai-security-agent
+    ```
+
+2. Install dependencies:
+
+    ```bash
+    uv sync --dev
+    ```
+
+3. Set up Google Cloud credentials:
+
+    ```bash
+    gcloud auth application-default login
+    ```
+
+4. Configure environment variables (copy and edit `.env.example` to `.env`):
+
+    ```bash
+    export GOOGLE_GENAI_USE_VERTEXAI=1
+    export GOOGLE_CLOUD_PROJECT=my-project
+    export GOOGLE_CLOUD_LOCATION=us-central1
+    ```
+
+5. Run the agent:
+
+    ```bash
+    uv run adk web
+    ```
 
 ---
 
@@ -229,7 +291,8 @@ class SecurityAuditConfig:
 Run the test suite:
 
 ```bash
-python -m pytest tests/test_agent.py -v
+uv sync --dev
+uv run pytest tests/ -v
 ```
 
 ---

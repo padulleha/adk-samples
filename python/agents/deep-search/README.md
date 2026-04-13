@@ -30,19 +30,60 @@ Here is the agent in action:
 
 <img src="https://github.com/GoogleCloudPlatform/agent-starter-pack/blob/main/docs/images/adk_gemini_fullstack.gif?raw=true" width="80%" alt="Gemini Fullstack ADK Preview">
 
-This project adapts concepts from the [Gemini FullStack LangGraph Quickstart](https://github.com/google-gemini/gemini-fullstack-langgraph-quickstart) for the frontend app. 
+This project adapts concepts from the [Gemini FullStack LangGraph Quickstart](https://github.com/google-gemini/gemini-fullstack-langgraph-quickstart) for the frontend app.
 
-## 🚀 Getting Started: From Zero to Running Agent in 1 Minute
-**Prerequisites:** **[Python 3.10+](https://www.python.org/downloads/)**, **[Node.js](https://nodejs.org/)**, **[uv](https://github.com/astral-sh/uv)**
+## Setup and Installation
 
-You have two options to get started. Choose the one that best fits your setup:
+### Prerequisites
 
-*   A. **[Google AI Studio (Recommended)](#a-google-ai-studio-recommended)**: The quickest way to get started using a **Google AI Studio API key**. This method involves cloning the sample repository.
-*   B. **[Google Cloud Vertex AI](#b-google-cloud-vertex-ai)**: Choose this path if you want to use an existing **Google Cloud project** for authentication and deployment. This method generates a new, prod-ready project using the [agent-starter-pack](https://goo.gle/agent-starter-pack) including all the deployment scripts required.
+-   Python 3.10+
+-   [Node.js](https://nodejs.org/)
+-   [uv](https://github.com/astral-sh/uv) for dependency management
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+-   [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) and a **Google Cloud Project** with the **Vertex AI API** enabled
+
+## Agent Starter Pack (recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to scaffold a production-ready project and choose your deployment target ([Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) or [Cloud Run](https://cloud.google.com/run)), with CI/CD and other production features. The easiest way is with [uv](https://docs.astral.sh/uv/) (one command, no venv or pip install needed):
+
+```bash
+uvx agent-starter-pack create my-deep-search-agent -a adk@deep-search
+```
+
+If you don't have uv yet: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+The starter pack will prompt you to select deployment options and set up your Google Cloud project.
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-deep-search-agent -a adk@deep-search
+```
+
+</details>
+
+From your newly created project directory (e.g. `my-deep-search-agent`), install dependencies and start the servers:
+
+```bash
+cd my-deep-search-agent && make install && make dev
+```
+
+Your agent is now running at `http://localhost:5173`.
 
 ---
 
-### A. Google AI Studio (Recommended)
+<details>
+<summary>Alternative: Local development (run from this sample repo)</summary>
+
+### Google AI Studio
 
 You'll need a **[Google AI Studio API Key](https://aistudio.google.com/app/apikey)**.
 
@@ -69,18 +110,9 @@ make install && make dev
 ```
 Your agent is now running at `http://localhost:5173`.
 
----
+### Using Vertex AI with the cloned repository
 
-### B. Google Cloud Vertex AI (via Agent Starter Pack)
-
-Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready project with deployment scripts. This is ideal for cloud deployment scenarios.
-
-You'll need: **[Google Cloud SDK](https://cloud.google.com/sdk/docs/install)** and a **Google Cloud Project** with the **Vertex AI API** enabled.
-
-<details>
-<summary>📁 Alternative: Using the cloned repository with Vertex AI</summary>
-
-If you've already cloned the repository (as in Option A) and want to use Vertex AI instead of AI Studio, create a `.env` file in the `app` folder with:
+If you've already cloned the repository and want to use Vertex AI instead of AI Studio, create a `.env` file in the `app` folder with:
 
 ```bash
 echo "GOOGLE_GENAI_USE_VERTEXAI=TRUE" >> app/.env
@@ -94,40 +126,12 @@ gcloud auth application-default login
 ```
 
 Then run `make install && make dev` to start the agent.
+
 </details>
 
-#### Step 1: Create Project from Template
-This command uses the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a new directory (`my-fullstack-agent`) with all the necessary code.
-```bash
-# Create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+## Cloud Deployment
 
-# Install the starter pack and create your project
-pip install --upgrade agent-starter-pack
-agent-starter-pack create my-fullstack-agent -a adk@deep-search
-```
-<details>
-<summary>⚡️ Alternative: Using uv</summary>
-
-If you have [`uv`](https://github.com/astral-sh/uv) installed, you can create and set up your project with a single command:
-```bash
-uvx agent-starter-pack create my-fullstack-agent -a adk@deep-search
-```
-This command handles creating the project without needing to pre-install the package into a virtual environment.
-</details>
-
-You'll be prompted to select a deployment option (Agent Engine or Cloud Run) and verify your Google Cloud credentials.
-
-#### Step 2: Install & Run
-Navigate into your **newly created project folder**, then install dependencies and start the servers.
-```bash
-cd my-fullstack-agent && make install && make dev
-```
-Your agent is now running at `http://localhost:5173`.
-
-## ☁️ Cloud Deployment
-
-> **Note:** Cloud deployment applies only to projects created with **agent-starter-pack** (Option B).
+> **Note:** Cloud deployment applies only to projects created with **agent-starter-pack**.
 
 **Prerequisites:**
 ```bash
@@ -259,7 +263,7 @@ If you encounter issues while setting up or running this agent, here are some re
 - [Agent Starter Pack Troubleshooting](https://googlecloudplatform.github.io/agent-starter-pack/guide/troubleshooting.html): Common issues
 
 
-## 🛠️ Technologies Used
+## Technologies Used
 
 ### Backend
 *   [**Agent Development Kit (ADK)**](https://github.com/google/adk-python): The core framework for building the stateful, multi-turn agent.

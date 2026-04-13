@@ -52,3 +52,6 @@
 
 # Short movie agents
 /python/agents/short-movie-agents @rsamborski
+
+# GenMedia for Commerce
+/python/agents/genmedia-for-commerce/ @lspataroG @giuliosalierno
