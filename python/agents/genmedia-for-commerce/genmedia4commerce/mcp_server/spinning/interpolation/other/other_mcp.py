@@ -150,7 +150,7 @@ async def run_spinning_interpolation(
         glitch_results = await asyncio.gather(*glitch_tasks)
         glitch_idx = [i for i in range(len(videos)) if i not in needs_regen]
 
-        for i, glitch_result in zip(glitch_idx, glitch_results):
+        for i, glitch_result in zip(glitch_idx, glitch_results, strict=True):
             if glitch_result["is_valid"]:
                 valid_count += 1
             else:
@@ -162,7 +162,7 @@ async def run_spinning_interpolation(
         # Regenerate failed segments
         regen_tasks = [generate_segment(i) for i in needs_regen]
         regen_results = await asyncio.gather(*regen_tasks)
-        for i, new_video in zip(needs_regen, regen_results):
+        for i, new_video in zip(needs_regen, regen_results, strict=True):
             videos[i] = new_video
 
     # Step 5: Merge all segments
