@@ -15,10 +15,8 @@
 """Integration tests for SWE Agent."""
 
 import unittest
-from typing import Any
 
 from swe_benchmark_agent.orchestrator import (
-    MAX_VERIFICATION_TURN_COUNT,
     Orchestrator,
 )
 
