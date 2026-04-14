@@ -231,7 +231,8 @@ def create_frame_nano(
     logger.info("[Glasses VTO] Step 1 complete")
 
     logger.info("[Glasses VTO] Step 2: Face correction...")
-    correction_message = user_message_step1 + [
+    correction_message = [
+        *user_message_step1,
         step1_result,
         "No, the face is different. Use this face:",
         reference_face,
