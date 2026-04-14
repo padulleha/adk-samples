@@ -148,4 +148,4 @@ async def get_artifact(
         )
     except Exception as e:
         logger.error(f"Error loading artifact: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
