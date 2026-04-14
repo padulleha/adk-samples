@@ -80,7 +80,7 @@ async def get_gallery_images():
 
 
 @router.post("/preprocess")
-async def interpolation_preprocess(images: list[UploadFile] = File(...)):
+async def interpolation_preprocess(images: list[UploadFile] = File(...)):  # noqa: B008
     """Preprocess images for interpolation video generation."""
     if not images:
         raise HTTPException(status_code=400, detail="No images provided.")
@@ -110,13 +110,13 @@ async def interpolation_preprocess(images: list[UploadFile] = File(...)):
         return JSONResponse(content={"images": processed_images})
     except Exception as e:
         logger.error(f"[Interpolation Preprocess] Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate-prompt")
 async def interpolation_generate_prompt(
-    img1: UploadFile = File(...),
-    img2: UploadFile = File(...),
+    img1: UploadFile = File(...),  # noqa: B008
+    img2: UploadFile = File(...),  # noqa: B008
 ):
     """Generate a video prompt for interpolation between two frames."""
     img1_bytes = await img1.read()
@@ -134,7 +134,7 @@ async def interpolation_generate_prompt(
 
 @router.post("/generate-all")
 async def interpolation_generate_all(
-    images: list[UploadFile] = File(...),
+    images: list[UploadFile] = File(...),  # noqa: B008
     prompt: str = Form(...),
     backgroundColor: str = Form("#FFFFFF"),
     indices: str = Form(""),
@@ -266,12 +266,12 @@ async def interpolation_generate_all(
         raise
     except Exception as e:
         logger.error(f"[Interpolation Generate All] Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/merge")
 async def interpolation_merge(
-    videos: list[UploadFile] = File(...),
+    videos: list[UploadFile] = File(...),  # noqa: B008
     speeds: str = Form(...),
 ):
     """Merge multiple video segments into one final video."""
@@ -293,4 +293,4 @@ async def interpolation_merge(
         )
     except Exception as e:
         logger.error(f"[Interpolation Merge] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
