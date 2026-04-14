@@ -34,9 +34,9 @@ router = APIRouter(
 
 @router.post("/change-background")
 async def change_background_endpoint(
-    person_image: UploadFile = File(...),
+    person_image: UploadFile = File(...),  # noqa: B008
     background_description: str = Form(None),
-    background_image: UploadFile = File(None),
+    background_image: UploadFile = File(None),  # noqa: B008
     num_variations: int = Form(4),
 ):
     """Generate background change images with SSE streaming.
@@ -52,7 +52,7 @@ async def change_background_endpoint(
         logger.error(f"Error reading uploaded files: {e}")
         raise HTTPException(
             status_code=400, detail=f"Error reading uploaded files: {e}"
-        )
+        ) from e
 
     if not background_description and not background_image_bytes:
         raise HTTPException(
