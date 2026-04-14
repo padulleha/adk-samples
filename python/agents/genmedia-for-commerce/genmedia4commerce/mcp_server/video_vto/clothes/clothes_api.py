@@ -18,14 +18,14 @@ router = APIRouter(
 
 @router.post("/generate-video-vto")
 async def generate_video_vto(
-    full_body_image: UploadFile = File(...),
-    garments: list[UploadFile] = File(default=[]),
-    garment_uris: str = Form(default=""),
+    full_body_image: UploadFile = File(...),  # noqa: B008
+    garments: list[UploadFile] = File(default=[]),  # noqa: B008
+    garment_uris: str = Form(default=""),  # noqa: B008
     face_image: UploadFile | None = None,
-    scenario: str = Form("a plain white studio background"),
-    num_variations: int = Form(3),
-    number_of_videos: int = Form(4),
-    prompt: str = Form(""),
+    scenario: str = Form("a plain white studio background"),  # noqa: B008
+    num_variations: int = Form(3),  # noqa: B008
+    number_of_videos: int = Form(4),  # noqa: B008
+    prompt: str = Form(""),  # noqa: B008
 ):
     """Full Video VTO pipeline (SSE).
 
@@ -80,9 +80,9 @@ async def generate_video_vto(
 
 @router.post("/generate-animate-model")
 async def generate_animate_model(
-    model_image: UploadFile = File(...),
-    number_of_videos: int = Form(4),
-    prompt: str = Form(""),
+    model_image: UploadFile = File(...),  # noqa: B008
+    number_of_videos: int = Form(4),  # noqa: B008
+    prompt: str = Form(""),  # noqa: B008
 ):
     """Animate a model image into catwalk-style videos (SSE).
 
