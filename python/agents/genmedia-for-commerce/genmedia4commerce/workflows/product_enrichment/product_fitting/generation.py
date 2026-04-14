@@ -391,7 +391,8 @@ def fix_fitting(
     """
     logger.debug("[Fitting] Starting fix attempt")
 
-    fix_message = original_message + [
+    fix_message = [
+        *original_message,
         generated_image,
         f"""No, the garment reproduction has issues:
 {eval_feedback}
