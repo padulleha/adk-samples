@@ -62,7 +62,7 @@ async def get_gallery_images():
 
 @router.post("/enhance-image")
 async def enhance_image_endpoint(
-    image: UploadFile = File(...), view_type: str = Form("front")
+    image: UploadFile = File(...), view_type: str = Form("front")  # noqa: B008
 ):
     """Generates 4 enhanced variations of the uploaded image using AI."""
     try:
@@ -91,14 +91,14 @@ async def enhance_image_endpoint(
         )
     except Exception as e:
         logger.error(f"Error in /enhance-image: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
 
 
 @router.post("/generate-vto")
 async def generate_vto_endpoint(
-    model_image: UploadFile = File(...),
-    product_image: UploadFile | None = File(None),
-    product_image2: UploadFile | None = File(None),
+    model_image: UploadFile = File(...),  # noqa: B008
+    product_image: UploadFile | None = File(None),  # noqa: B008
+    product_image2: UploadFile | None = File(None),  # noqa: B008
     num_variations: int = Form(3),
 ):
     """Generate glasses virtual try-on images with SSE streaming."""
@@ -113,7 +113,7 @@ async def generate_vto_endpoint(
         logger.error(f"Error reading uploaded files: {e}")
         raise HTTPException(
             status_code=400, detail=f"Error reading uploaded files: {e}"
-        )
+        ) from e
 
     if not glasses_images:
         raise HTTPException(
@@ -145,7 +145,7 @@ async def generate_vto_endpoint(
 
 @router.post("/edit-frame")
 async def edit_frame_endpoint(
-    prompt: str = Form(...), generated_image: UploadFile = File(...)
+    prompt: str = Form(...), generated_image: UploadFile = File(...)  # noqa: B008
 ):
     """Edits an existing generated frame image based on user prompt."""
     try:
@@ -162,4 +162,4 @@ async def edit_frame_endpoint(
         return JSONResponse(content={"edited_frame_image": edited_frame_b64})
     except Exception as e:
         logger.error(f"Error in /edit-frame: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
