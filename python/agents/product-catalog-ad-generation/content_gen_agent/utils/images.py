@@ -94,7 +94,7 @@ async def ensure_image_artifact(
                 exc_info=True,
             )
             # Fall through to try loading as an artifact
-            image_filename = image_filename.split("/")[-1]
+            image_filename = image_filename.rsplit("/", 1)[-1]
 
     try:
         logging.info(
