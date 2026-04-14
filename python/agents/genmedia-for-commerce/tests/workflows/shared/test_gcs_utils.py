@@ -177,7 +177,7 @@ class TestUploadFileToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_raises_on_missing_file(self, mock_get_client, mock_storage_client):
         """Should raise ValueError for non-existent file."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         with pytest.raises(ValueError, match="Invalid source file"):
@@ -190,7 +190,7 @@ class TestUploadFileToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_raises_on_directory(self, mock_get_client, mock_storage_client):
         """Should raise ValueError when source is a directory."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -204,7 +204,7 @@ class TestUploadFileToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_sets_content_type(self, mock_get_client, mock_storage_client):
         """Should set content type when provided."""
-        client, bucket, blob = mock_storage_client
+        client, _, blob = mock_storage_client
         mock_get_client.return_value = client
 
         with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
