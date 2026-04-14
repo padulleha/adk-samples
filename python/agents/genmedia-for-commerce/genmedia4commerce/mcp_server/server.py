@@ -38,7 +38,7 @@ if genmedia_dir not in sys.path:
     sys.path.insert(0, genmedia_dir)
 
 # Load environment variables
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
 project_root = Path(__file__).parent.parent.parent
 config_path = Path(__file__).parent.parent / "config.env"
