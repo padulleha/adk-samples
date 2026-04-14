@@ -398,7 +398,7 @@ def _build_manifest(
         "metadata": f"{base_uri}clips/clips_metadata.json",
     }
 
-    for clip, meta in zip(result["clips"], clips_meta):
+    for clip, meta in zip(result["clips"], clips_meta, strict=True):
         clip_name = f"{product_id}_clip_{clip['index']}"
         clip_base = f"{base_uri}clips/{clip_name}"
 
@@ -414,7 +414,7 @@ def _build_manifest(
         frame_map = {}
         if "sampled_frame_indices" in clip and "frame_classifications" in clip:
             frame_map = dict(
-                zip(clip["sampled_frame_indices"], clip["frame_classifications"])
+                zip(clip["sampled_frame_indices"], clip["frame_classifications"], strict=True)
             )
 
         for i in range(num_frames):
