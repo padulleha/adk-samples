@@ -144,7 +144,7 @@ def classify_shoe_closure(
     )
 
     # Build input: user prompt followed by all images
-    text_images_pieces = [VELCRO_USER_PROMPT] + list(image_bytes_list)
+    text_images_pieces = [VELCRO_USER_PROMPT, *image_bytes_list]
 
     result = generate_gemini(
         text_images_pieces=text_images_pieces, client=client, model=model, config=config
