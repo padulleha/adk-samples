@@ -190,7 +190,7 @@ def get_frame_similarity_bytes(frame1_bytes, frame2_bytes):
 def detect_rotation_direction(
     clip_a_frames: list[bytes],
     clip_b_frames: list[bytes],
-    clip_b_reversed_frames: list[bytes] = None,
+    clip_b_reversed_frames: list[bytes] | None = None,
     saturation_max: float = 24.0,
     value_min: float = 90.0,
 ) -> dict:
