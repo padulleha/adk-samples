@@ -45,7 +45,7 @@ async def generate_video_vto(
         logger.error(f"Error reading uploaded files: {e}")
         raise HTTPException(
             status_code=400, detail=f"Error reading uploaded files: {e}"
-        )
+        ) from e
 
     if not garment_images:
         raise HTTPException(
