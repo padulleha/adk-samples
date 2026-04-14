@@ -675,7 +675,7 @@ def create_canvas(
     margin_side: int = 0,
     bg_color: tuple = (255, 255, 255, 255),
     zoom_factor: float = 1.0,
-    target_diagonal: float = None,
+    target_diagonal: float | None = None,
     target_height: float | None = None,
     add_shadow: bool = False,
 ) -> bytes:
