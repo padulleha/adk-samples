@@ -36,7 +36,7 @@ def _patch_vector_search_import():
 
 
 # Now we can safely import catalog_mcp (it will use the patched vector_search)
-from mcp_server.shared.catalog.catalog_mcp import run_catalog_search
+from mcp_server.shared.catalog.catalog_mcp import run_catalog_search  # noqa: E402
 
 
 class TestRunCatalogSearch:
@@ -141,7 +141,7 @@ class TestRunCatalogSearch:
         """Default k parameter should be 12."""
         with patch(
             "mcp_server.shared.catalog.catalog_mcp.search", return_value=[]
-        ) as mock_search:
+        ):
             await run_catalog_search(query="test")
 
         # run_in_executor passes (None, search, query, k) -- check the call
