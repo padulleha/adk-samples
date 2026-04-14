@@ -441,10 +441,10 @@ def run_video_gen_pipeline_r2v(
     veo_model: str = "veo-3.1-generate-001",
     reference_type: str = "asset",
     product_consistency_model: str = "gemini-3-flash-preview",
-    product_id: str = None,
-    gcs_bucket: str = None,
+    product_id: str | None = None,
+    gcs_bucket: str | None = None,
     gcs_destination_prefix: str = "shoe_spinning_outputs",
-    gcs_project_id: str = None,
+    gcs_project_id: str | None = None,
     upscale_images: bool = True,
     disable_logging: bool = True,
 ):
