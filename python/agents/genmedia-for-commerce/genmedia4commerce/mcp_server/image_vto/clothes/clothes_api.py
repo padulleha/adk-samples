@@ -18,8 +18,8 @@ router = APIRouter(
 
 @router.post("/generate-vto")
 async def generate_vto_endpoint(
-    full_body_image: UploadFile = File(...),
-    garments: list[UploadFile] = File(default=[]),
+    full_body_image: UploadFile = File(...),  # noqa: B008
+    garments: list[UploadFile] = File(default=[]),  # noqa: B008
     garment_uris: str = Form(default=""),
     scenario: str = Form("a plain light grey studio environment"),
     num_variations: int = Form(3),
@@ -41,7 +41,7 @@ async def generate_vto_endpoint(
         logger.error(f"Error reading uploaded files: {e}")
         raise HTTPException(
             status_code=400, detail=f"Error reading uploaded files: {e}"
-        )
+        ) from e
 
     if not garment_images:
         raise HTTPException(
