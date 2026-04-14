@@ -94,7 +94,7 @@ async def get_gallery_images():
 
 
 @router.post("/preprocess-images-r2v")
-async def preprocess_images_r2v(images: list[UploadFile] = File(...)):
+async def preprocess_images_r2v(images: list[UploadFile] = File(...)):  # noqa: B008
     """Preprocesses shoe images for R2V pipeline and returns ordered images."""
     if not images:
         raise HTTPException(status_code=400, detail="No images provided.")
@@ -142,7 +142,7 @@ async def preprocess_images_r2v(images: list[UploadFile] = File(...)):
 
         results = []
         for idx, (img_bytes, classification) in enumerate(
-            zip(reference_images, stacked_classes)
+            zip(reference_images, stacked_classes, strict=True)
         ):
             results.append(
                 {
@@ -162,14 +162,14 @@ async def preprocess_images_r2v(images: list[UploadFile] = File(...)):
         )
     except Exception as e:
         logger.error(f"Error in R2V preprocessing: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         for image in images:
             image.file.close()
 
 
 @router.post("/generate-prompt-r2v")
-async def generate_prompt_with_position_r2v(all_images: list[UploadFile] = File(...)):
+async def generate_prompt_with_position_r2v(all_images: list[UploadFile] = File(...)):  # noqa: B008
     """Generates R2V prompt and stacked reference images for video generation."""
     all_images_bytes = [await img.read() for img in all_images]
 
@@ -203,12 +203,12 @@ async def generate_prompt_with_position_r2v(all_images: list[UploadFile] = File(
         logger.error(f"Error during R2V prompt generation: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to generate R2V prompt: {e}"
-        )
+        ) from e
 
 
 @router.post("/generate-video-r2v")
 async def generate_video_r2v(
-    reference_images: list[UploadFile] = File(...),
+    reference_images: list[UploadFile] = File(...),  # noqa: B008
     index: int = Form(0),
     prompt: str = Form(None),
     reference_type: str = Form("asset"),
@@ -247,11 +247,11 @@ async def generate_video_r2v(
         logger.error(
             f"Error generating R2V video for index {index}: {e}", exc_info=True
         )
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
 
 
 @router.post("/merge-videos")
-async def merge_videos(videos: list[UploadFile] = File(...), speeds: str = Form(...)):
+async def merge_videos(videos: list[UploadFile] = File(...), speeds: str = Form(...)):  # noqa: B008
     """Merges multiple video files into one."""
     if not videos:
         raise HTTPException(status_code=400, detail="No video files provided.")
@@ -271,14 +271,14 @@ async def merge_videos(videos: list[UploadFile] = File(...), speeds: str = Form(
         )
     except Exception as e:
         logger.error(f"Error during merge: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         for video in videos:
             video.file.close()
 
 
 @router.post("/run-pipeline-r2v")
-async def run_pipeline_endpoint_r2v(payload: dict = Body(...)):
+async def run_pipeline_endpoint_r2v(payload: dict = Body(...)):  # noqa: B008
     """End-to-end R2V pipeline: classify, preprocess, and generate spinning video."""
     if "images_base64" not in payload:
         raise HTTPException(
@@ -313,7 +313,7 @@ async def run_pipeline_endpoint_r2v(payload: dict = Body(...)):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid base64 encoding for image {idx}: {e!s}",
-                )
+                ) from e
 
         result = await run_in_threadpool(
             run_video_gen_pipeline_r2v,
@@ -364,7 +364,7 @@ async def run_pipeline_endpoint_r2v(payload: dict = Body(...)):
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error in R2V pipeline: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
