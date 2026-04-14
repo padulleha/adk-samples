@@ -84,7 +84,7 @@ async def get_gallery_images():
 
 
 @router.post("/preprocess")
-async def r2v_preprocess(images: list[UploadFile] = File(...)):
+async def r2v_preprocess(images: list[UploadFile] = File(...)):  # noqa: B008
     """Preprocess product images for R2V generation."""
     if not images:
         raise HTTPException(status_code=400, detail="No images provided.")
@@ -122,11 +122,11 @@ async def r2v_preprocess(images: list[UploadFile] = File(...)):
         )
     except Exception as e:
         logger.error(f"[R2V Preprocess] Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate-prompt")
-async def r2v_generate_prompt(images: list[UploadFile] = File(...)):
+async def r2v_generate_prompt(images: list[UploadFile] = File(...)):  # noqa: B008
     """Generate a prompt for product spinning video based on images."""
     images_bytes = [await img.read() for img in images]
 
@@ -147,12 +147,12 @@ async def r2v_generate_prompt(images: list[UploadFile] = File(...)):
         )
     except Exception as e:
         logger.error(f"[R2V Generate Prompt] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate")
 async def r2v_generate(
-    reference_images: list[UploadFile] = File(...),
+    reference_images: list[UploadFile] = File(...),  # noqa: B008
     prompt: str = Form(...),
     index: int = Form(0),
 ):
@@ -205,11 +205,11 @@ async def r2v_generate(
         )
     except Exception as e:
         logger.error(f"[R2V Generate] Error for index {index}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/pipeline")
-async def r2v_pipeline(images: list[UploadFile] = File(...)):
+async def r2v_pipeline(images: list[UploadFile] = File(...)):  # noqa: B008
     """Full end-to-end R2V pipeline: preprocess + generate prompt + generate video."""
     if not images:
         raise HTTPException(status_code=400, detail="No images provided.")
@@ -288,11 +288,11 @@ async def r2v_pipeline(images: list[UploadFile] = File(...)):
         )
     except Exception as e:
         logger.error(f"[R2V Pipeline] Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/merge")
-async def r2v_merge(videos: list[UploadFile] = File(...), speeds: str = Form(...)):
+async def r2v_merge(videos: list[UploadFile] = File(...), speeds: str = Form(...)):  # noqa: B008
     """Merge multiple video segments into one final video."""
     if not videos:
         raise HTTPException(status_code=400, detail="No video files provided.")
@@ -312,4 +312,4 @@ async def r2v_merge(videos: list[UploadFile] = File(...), speeds: str = Form(...
         )
     except Exception as e:
         logger.error(f"[R2V Merge] Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
