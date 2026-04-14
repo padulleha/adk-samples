@@ -68,7 +68,7 @@ def _parse_repo_path(repository: str) -> tuple[str | None, str | None]:
                                        Returns (None, None) if the format is invalid.
     """
     if repository.startswith(("http://", "https://")):
-        repo_path = repository.split("github.com/")[-1].rstrip(".git")
+        repo_path = repository.rsplit("github.com/", 1)[-1].rstrip(".git")
     else:
         repo_path = repository
     if "/" not in repo_path:
