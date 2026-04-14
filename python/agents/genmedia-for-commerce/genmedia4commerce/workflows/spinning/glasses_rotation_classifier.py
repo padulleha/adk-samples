@@ -83,7 +83,7 @@ def classify_glasses_rotation(
                     total_area = mask_np.shape[0] * mask_np.shape[1]
 
                     if mask_area / total_area > MIN_MASK_AREA_RATIO:
-                        ys, xs = np.where(mask_np > 128)
+                        _ys, xs = np.where(mask_np > 128)
                         cx = float(np.mean(xs))
                         centroids_x.append(cx)
                 except Exception as e:
