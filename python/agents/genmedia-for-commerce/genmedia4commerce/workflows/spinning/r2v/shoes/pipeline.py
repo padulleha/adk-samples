@@ -338,12 +338,12 @@ def preprocess_classify_images(
         logger.info(f"✓ Splitted predictions: {splitted_predictions}")
         splitted_valid = [
             img_bytes
-            for img_bytes, pred in zip(split_images_bytes_list, splitted_predictions)
+            for img_bytes, pred in zip(split_images_bytes_list, splitted_predictions, strict=True)
             if pred.strip().lower() not in ["multiple", "invalid"]
         ]
         splitted_pred = [
             pred.strip().lower()
-            for _, pred in zip(split_images_bytes_list, splitted_predictions)
+            for _, pred in zip(split_images_bytes_list, splitted_predictions, strict=True)
             if pred.strip().lower() not in ["multiple", "invalid"]
         ]
 
@@ -359,7 +359,7 @@ def preprocess_classify_images(
             f"Video generation status is 'exclude', skipping upscaling. Classifications: {final_classifications}"
         )
         return (
-            list(zip(all_valid_images, final_classifications)),
+            list(zip(all_valid_images, final_classifications, strict=True)),
             video_gen_status,
             False,
         )
