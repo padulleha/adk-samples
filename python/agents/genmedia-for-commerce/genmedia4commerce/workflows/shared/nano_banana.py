@@ -107,13 +107,13 @@ def generate_nano(
         try:
             future = executor.submit(_call_api)
             result = future.result(timeout=timeout)
-        except FuturesTimeoutError:
+        except FuturesTimeoutError as e:
             logger.error(
                 f"[generate_nano] Thread {thread_id}: API call timed out after {timeout}s"
             )
             # Shutdown without waiting - let the background thread continue/die on its own
             executor.shutdown(wait=False)
-            raise NanoTimeoutError(f"Nano generation timed out after {timeout} seconds")
+            raise NanoTimeoutError(f"Nano generation timed out after {timeout} seconds") from e
         finally:
             # Only wait for cleanup if we didn't timeout
             executor.shutdown(wait=False)
