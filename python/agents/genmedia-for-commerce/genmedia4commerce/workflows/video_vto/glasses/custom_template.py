@@ -101,11 +101,11 @@ The following images are useful to further customize the prompt and to understan
             config=config,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate prompt: {e}") from e
 
 
 def generate_animation_prompt(
-    genai_client, text_prompt: str, model_image_bytes: bytes = None
+    genai_client, text_prompt: str, model_image_bytes: bytes | None = None
 ) -> str:
     """
     Enhances an animation prompt using AI expertise in video and glasses commercials.
@@ -145,4 +145,4 @@ Original prompt: {text_prompt}"""
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to generate animation prompt: {e}"
-        )
+        ) from e
