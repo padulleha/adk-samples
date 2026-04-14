@@ -74,7 +74,7 @@ def sort_masks_by_horizontal_position(
         # Get the mask from the first tuple to find dimensions
         first_mask = mask_data_list[0][0]
 
-        img_h = len(first_mask)
+        _img_h = len(first_mask)
         img_w = len(first_mask[0])
         middle_x = img_w / 2.0
 
