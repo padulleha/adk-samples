@@ -111,7 +111,7 @@ def upload_folder_to_gcs(
 
     # Create blob objects with explicit names
     blob_file_pairs = []
-    for file_path, blob_name in zip(file_paths, blob_names):
+    for file_path, blob_name in zip(file_paths, blob_names, strict=True):
         blob = bucket.blob(blob_name)
         blob_file_pairs.append((file_path, blob))
 
