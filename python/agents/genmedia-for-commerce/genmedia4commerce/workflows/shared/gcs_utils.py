@@ -124,7 +124,7 @@ def upload_folder_to_gcs(
     uploaded_uris = []
     errors = []
 
-    for (file_path, blob), result in zip(blob_file_pairs, results):
+    for (file_path, blob), result in zip(blob_file_pairs, results, strict=True):
         if isinstance(result, Exception):
             errors.append(f"Failed to upload {file_path}: {result}")
         else:
@@ -214,7 +214,7 @@ def save_and_upload_to_gcs(
     bucket_name: str,
     gcs_destination_prefix: str = "shoe_spinning_outputs",
     project_id: str | None = None,
-    pre_sampled_frames: list[bytes] = None,
+    pre_sampled_frames: list[bytes] | None = None,
     image_format: str = "png",
 ) -> list[str]:
     """
