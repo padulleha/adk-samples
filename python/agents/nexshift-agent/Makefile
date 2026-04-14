@@ -9,7 +9,7 @@
 # =============================================================================
 -include .env
 PROJECT_ID ?= $(GOOGLE_CLOUD_PROJECT)
-DEPLOY_LOCATION ?= $(AGENT_ENGINE_LOCATION)
+DEPLOY_LOCATION ?= $(or $(AGENT_ENGINE_LOCATION),us-central1)
 STAGING_BUCKET ?= gs://$(PROJECT_ID)-nexshift-agent-staging
 AGENT_NAME ?= nexshift-agent
 
@@ -69,6 +69,10 @@ deploy-check:
 	@echo "🔍 Checking project configuration..."
 	@echo "   PROJECT_ID: $(PROJECT_ID)"
 	@echo "   LOCATION: $(DEPLOY_LOCATION)"
+	@if [ -z "$(AGENT_ENGINE_LOCATION)" ]; then \
+		echo "   ⚠️  DEPLOY_LOCATION not set, using default: us-central1"; \
+		echo "   📖 To change, see README.md for configuration instructions."; \
+	fi
 	@echo "   STAGING_BUCKET: $(STAGING_BUCKET)"
 	@echo "   AGENT_NAME: $(AGENT_NAME)"
 

@@ -219,6 +219,11 @@ GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GOOGLE_CLOUD_LOCATION=global
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 
+# Agent Engine deployment location (separate from GOOGLE_CLOUD_LOCATION)
+AGENT_ENGINE_LOCATION=us-central1
+GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=TRUE
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=TRUE
+
 # Option 2: Use Gemini API key (simpler for local development)
 GOOGLE_GENAI_API_KEY=your-gemini-api-key
 ```
