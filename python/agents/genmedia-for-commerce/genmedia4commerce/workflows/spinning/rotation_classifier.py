@@ -289,7 +289,7 @@ def c_detect_rotation_segments(video_path: str, config: ClassifierConfig) -> dic
         frame_idx += 1
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        p1, st, err = cv2.calcOpticalFlowPyrLK(
+        p1, st, _err = cv2.calcOpticalFlowPyrLK(
             old_gray, frame_gray, p0, None, **lk_params
         )
 
