@@ -12,7 +12,7 @@ requires-python = ">=3.10,<3.13"
 keywords = ["adk", "agents", "gemini", "retail", "location-strategy"]
 
 dependencies = [
-    "google-adk>=1.20.0",
+    "google-adk>=1.28.1",
     "googlemaps>=4.10.0",
     "pydantic>=2.10.0",
     "python-dotenv>=1.0.0",
@@ -23,7 +23,7 @@ Repository = "https://github.com/google/adk-samples"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.24.0",
     "nest-asyncio>=1.6.0",
     "agent-starter-pack>=0.14.1",
