@@ -331,9 +331,9 @@ class TestUploadFolderToGcs:
         mock_get_client.return_value = client
         mock_upload_many.return_value = [None, None]  # Success for txt files only
 
-        temp_dir, files = temp_folder_with_files
+        temp_dir, _ = temp_folder_with_files
 
-        result = upload_folder_to_gcs(
+        upload_folder_to_gcs(
             bucket_name="test-bucket",
             source_folder_path=temp_dir,
             include_extensions=[".txt"],
@@ -353,11 +353,11 @@ class TestUploadFolderToGcs:
         temp_folder_with_files,
     ):
         """Should exclude files by extension."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
         mock_upload_many.return_value = [None, None, None]
 
-        temp_dir, files = temp_folder_with_files
+        temp_dir, _ = temp_folder_with_files
 
         upload_folder_to_gcs(
             bucket_name="test-bucket",
@@ -392,7 +392,7 @@ class TestUploadFolderToGcs:
         mock_get_client.return_value = client
         mock_upload_many.return_value = [None, None, None, None]
 
-        temp_dir, files = temp_folder_with_files
+        temp_dir, _ = temp_folder_with_files
 
         result = upload_folder_to_gcs(
             bucket_name="test-bucket",
