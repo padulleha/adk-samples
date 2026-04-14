@@ -284,7 +284,8 @@ Generate the high-fidelity image."""
 
     logger.debug("[VTO] Step 2: Face improvement with correction...")
 
-    correction_message = user_message_step1 + [
+    correction_message = [
+        *user_message_step1,
         step1_result,
         "No, the face is different. Use this face:",
         reference_face,
