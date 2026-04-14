@@ -148,7 +148,7 @@ async def _load_single_clip(
             f.write(artifact.inline_data.data)
 
         clip = VideoFileClip(temp_path)
-        clip_index_str = filename.split("_")[0]
+        clip_index_str = filename.split("_", 1)[0]
         if clip_index_str.isdigit():
             clip_index = int(clip_index_str)
             if 0 <= clip_index < len(storyline):
