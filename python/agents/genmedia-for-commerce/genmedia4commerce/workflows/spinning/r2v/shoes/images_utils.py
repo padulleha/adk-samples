@@ -279,10 +279,10 @@ def classify_frames(sampled_frames, client, model, mode="normal"):
 def sample_and_process_frames(
     frame_list: list[bytes],
     target_num_frames: int = 50,
-    target_size: tuple[int, int] = None,
-    initial_class: str = None,
-    reference_images: list[bytes] = None,
-    reference_labels: list[str] = None,
+    target_size: tuple[int, int] | None = None,
+    initial_class: str | None = None,
+    reference_images: list[bytes] | None = None,
+    reference_labels: list[str] | None = None,
     client=None,
     gemini_model=None,
 ) -> list[bytes]:
@@ -327,7 +327,7 @@ def sample_and_process_frames(
             sampled_frames_initial_class = [
                 (idx, frame)
                 for idx, (frame, position) in enumerate(
-                    zip(sampled_frames, product_position)
+                    zip(sampled_frames, product_position, strict=True)
                 )
                 if position == initial_class
             ]
