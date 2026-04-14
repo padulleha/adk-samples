@@ -189,7 +189,7 @@ class ShoeClassifierV2:
             branch_outs.append(out)
         feat_out = features @ w["feat_proj_W"].T + w["feat_proj_b"]
         np.maximum(feat_out, 0, feat_out)
-        concat = np.concatenate(branch_outs + [feat_out], axis=-1)
+        concat = np.concatenate([*branch_outs, feat_out], axis=-1)
         h = concat @ w["head_W1"].T + w["head_b1"]
         np.maximum(h, 0, h)
         return h @ w["head_W2"].T + w["head_b2"]
