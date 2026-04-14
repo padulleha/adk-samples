@@ -96,10 +96,10 @@ async def generate_prompt_from_json(request: Request):
 
 @router.post("/generate-custom-prompt")
 async def generate_custom_prompt(
-    text: str = Form(...),
-    model_image: UploadFile | None = File(None),
-    product_image: UploadFile | None = File(None),
-    custom_field_dict: str = Form(None),
+    text: str = Form(...),  # noqa: B008
+    model_image: UploadFile | None = File(None),  # noqa: B008
+    product_image: UploadFile | None = File(None),  # noqa: B008
+    custom_field_dict: str = Form(None),  # noqa: B008
 ):
     """Generates a structured prompt from user's natural language text and images."""
     try:
@@ -149,7 +149,7 @@ async def generate_custom_prompt(
 
 @router.post("/generate-animation-prompt")
 async def generate_animation_prompt_endpoint(
-    text: str = Form(...), model_image: UploadFile | None = File(None)
+    text: str = Form(...), model_image: UploadFile | None = File(None)  # noqa: B008
 ):
     """Generates an enhanced animation prompt from user's text and model image."""
     try:
@@ -170,15 +170,15 @@ async def generate_animation_prompt_endpoint(
 
 @router.post("/generate-video")
 async def generate_video_from_collage(
-    prompt: str = Form(""),
-    model_image: UploadFile | None = File(None),
-    model_side_image: UploadFile | None = File(None),
-    product_image: UploadFile | None = File(None),
-    number_of_videos: int = Form(4),
-    is_template_product_image: str = Form("false"),
-    background_color: str = Form("0,215,6,255"),
-    zoom_level: int = Form(0),
-    is_animation_mode: str = Form("false"),
+    prompt: str = Form(""),  # noqa: B008
+    model_image: UploadFile | None = File(None),  # noqa: B008
+    model_side_image: UploadFile | None = File(None),  # noqa: B008
+    product_image: UploadFile | None = File(None),  # noqa: B008
+    number_of_videos: int = Form(4),  # noqa: B008
+    is_template_product_image: str = Form("false"),  # noqa: B008
+    background_color: str = Form("0,215,6,255"),  # noqa: B008
+    zoom_level: int = Form(0),  # noqa: B008
+    is_animation_mode: str = Form("false"),  # noqa: B008
 ):
     """Generates videos from a collage of images or animates a single image."""
     try:
@@ -227,7 +227,7 @@ async def regenerate_video(req: RegenerationRequest):
 
 
 @router.post("/merge-videos")
-async def merge_videos(videos: list[UploadFile] = File(...), speeds: str = Form(...)):
+async def merge_videos(videos: list[UploadFile] = File(...), speeds: str = Form(...)):  # noqa: B008
     """Merges multiple video files into one."""
     if not videos:
         raise HTTPException(status_code=400, detail="No video files provided.")
