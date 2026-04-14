@@ -121,5 +121,5 @@ def generate_nano(
     logger.debug(f"[generate_nano] Thread {thread_id}: API call completed")
 
     result = result.candidates[0].content.parts
-    result = [x for x in result if x.text is None][0].inline_data.data
+    result = next(x for x in result if x.text is None).inline_data.data
     return result
