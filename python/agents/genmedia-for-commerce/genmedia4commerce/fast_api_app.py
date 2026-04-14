@@ -67,8 +67,12 @@ app.description = "ADK Agent + REST API for GenMedia workflows"
 # --- REST API routers (replace legacy mounts) ---
 from chat_api import router as chat_router  # noqa: E402
 
-from mcp_server.image_vto.clothes.clothes_api import router as clothes_image_router  # noqa: E402
-from mcp_server.image_vto.glasses.glasses_api import router as glasses_image_router  # noqa: E402
+from mcp_server.image_vto.clothes.clothes_api import (  # noqa: E402
+    router as clothes_image_router,
+)
+from mcp_server.image_vto.glasses.glasses_api import (  # noqa: E402
+    router as glasses_image_router,
+)
 from mcp_server.other.background_changer.background_changer_api import (  # noqa: E402
     router as background_changer_router,
 )
@@ -79,10 +83,18 @@ from mcp_server.shared.catalog.catalog_api import router as catalog_router  # no
 from mcp_server.spinning.interpolation.other.other_api import (  # noqa: E402
     router as interpolation_other_router,
 )
-from mcp_server.spinning.r2v.other.other_api import router as r2v_other_router  # noqa: E402
-from mcp_server.spinning.r2v.shoes.shoes_api import router as shoes_spinning_router  # noqa: E402
-from mcp_server.video_vto.clothes.clothes_api import router as clothes_video_router  # noqa: E402
-from mcp_server.video_vto.glasses.glasses_api import router as glasses_video_router  # noqa: E402
+from mcp_server.spinning.r2v.other.other_api import (  # noqa: E402
+    router as r2v_other_router,
+)
+from mcp_server.spinning.r2v.shoes.shoes_api import (  # noqa: E402
+    router as shoes_spinning_router,
+)
+from mcp_server.video_vto.clothes.clothes_api import (  # noqa: E402
+    router as clothes_video_router,
+)
+from mcp_server.video_vto.glasses.glasses_api import (  # noqa: E402
+    router as glasses_video_router,
+)
 
 app.include_router(product_fitting_router)
 app.include_router(clothes_image_router)
