@@ -91,7 +91,7 @@ async def generate_prompt_from_json(request: Request):
         return JSONResponse(content={"prompt": prompt_text})
     except Exception as e:
         logger.error(f"Error in /generate-prompt: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
 
 
 @router.post("/generate-custom-prompt")
@@ -144,7 +144,7 @@ async def generate_custom_prompt(
         return JSONResponse(content=json_response)
     except Exception as e:
         logger.error(f"Error in /generate-custom-prompt: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
 
 
 @router.post("/generate-animation-prompt")
@@ -165,7 +165,7 @@ async def generate_animation_prompt_endpoint(
         return JSONResponse(content={"enhanced_prompt": enhanced_prompt})
     except Exception as e:
         logger.error(f"Error in /generate-animation-prompt: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}") from e
 
 
 @router.post("/generate-video")
