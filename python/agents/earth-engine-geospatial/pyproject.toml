@@ -7,7 +7,7 @@ readme = "README.md"
 requires-python = ">=3.10,<3.13"
 
 dependencies = [
-    "google-adk>=1.0.0",
+    "google-adk>=1.28.1",
     "earthengine-api",
     "numpy",
     "google-auth",
@@ -16,7 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.2",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.23.7",
     "ruff>=0.4.6",
 ]
