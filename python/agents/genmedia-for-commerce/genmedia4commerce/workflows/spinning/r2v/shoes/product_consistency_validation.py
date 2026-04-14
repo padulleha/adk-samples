@@ -124,7 +124,7 @@ def forward_fill_labels(
     filled_indices = []
     last_valid_label = None
 
-    for idx, label in zip(frame_indices, frame_labels):
+    for idx, label in zip(frame_indices, frame_labels, strict=True):
         if label is not None and label:
             # Valid label found, update last_valid_label
             last_valid_label = label
@@ -145,7 +145,7 @@ def forward_fill_labels(
         f"Forward-filled {filled_count} null labels from {len(frame_labels)} sampled frames"
     )
     logger.info(
-        f"Result: {len(filled_labels)} frames with labels (expanded from {sum(1 for l in frame_labels if l)} labeled)"
+        f"Result: {len(filled_labels)} frames with labels (expanded from {sum(1 for label in frame_labels if label)} labeled)"
     )
 
     return filled_labels, filled_indices
@@ -328,7 +328,7 @@ def match_frames_to_references(
     matched_pairs = []
     skipped = 0
 
-    for frame_idx, frame_label in zip(frame_indices, frame_labels):
+    for frame_idx, frame_label in zip(frame_indices, frame_labels, strict=True):
         # Skip null/empty labels
         if not frame_label or frame_label.strip() == "":
             skipped += 1
