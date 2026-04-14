@@ -25,61 +25,92 @@ A comprehensive data engineering agent.
     -   Manage data dependencies
     -   Ensure data quality
 
-## Installation
-
-
 ## Setup and Installation
 
-1.  **Prerequisites**
+### Prerequisites
 
-    *   Python 3.11+
-    *   Poetry
-        *   For dependency management and packaging. Please follow the
-            instructions on the official
-            [Poetry website](https://python-poetry.org/docs/) for installation.
-
-        ```bash
-        pip install poetry
-        ```
-
-    * A project on Google Cloud Platform
-    * Google Cloud CLI
-        *   For installation, please follow the instruction on the official
-            [Google Cloud website](https://cloud.google.com/sdk/docs/install).
-
-2.  **Installation**
-
+-   Python 3.10+
+-   uv for dependency management and packaging
+    -   See the official [uv website](https://docs.astral.sh/uv/) for installation.
     ```bash
-    # Clone this repository.
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+-   A project on Google Cloud Platform
+-   Google Cloud CLI
+    -   For installation, please follow the instruction on the official
+        [Google Cloud website](https://cloud.google.com/sdk/docs/install).
+
+## Agent Starter Pack (recommended)
+
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to scaffold a production-ready project and choose your deployment target ([Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) or [Cloud Run](https://cloud.google.com/run)), with CI/CD and other production features. The easiest way is with [uv](https://docs.astral.sh/uv/) (one command, no venv or pip install needed):
+
+```bash
+uvx agent-starter-pack create my-data-engineering-agent -a adk@data-engineering
+```
+
+If you don't have uv yet: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+The starter pack will prompt you to select deployment options and set up your Google Cloud project.
+
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
+
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
+
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-data-engineering-agent -a adk@data-engineering
+```
+
+</details>
+
+From your newly created project directory (e.g. `my-data-engineering-agent`), configure your environment and run:
+
+```bash
+cd my-data-engineering-agent
+cp data_engineering_agent/.env.example .env
+# Edit .env with your Google Cloud project, Dataform repository, and workspace settings
+uv sync --dev
+uv run adk run data_engineering_agent
+```
+
+For the web UI:
+
+```bash
+uv run adk web
+```
+
+Then select `data_engineering_agent` from the dropdown menu.
+
+---
+
+<details>
+<summary>Alternative: Local development (run from this sample repo)</summary>
+
+### Agent Setup
+
+1. Clone the repository:
+    ```bash
     git clone https://github.com/google/adk-samples.git
     cd adk-samples/python/agents/data-engineering
-
-    # Install the package and dependencies.
-    poetry install
+    ```
+    For the rest of this tutorial **ensure you remain in the `python/agents/data-engineering` directory**.
+2. Install the dependencies:
+    ```bash
+    uv sync
     ```
 
-3.  **Configuration** 
+3.  **Configuration**
 
-   Create a `.env` file in the project root directory: `cp .env.example
-    .env`
+    Create a `.env` file from the provided template and fill in your settings:
 
-   Edit the `.env` file with your configuration:
+    ```bash
+    cp .env.example .env
+    ```
 
-```
-    GOOGLE_CLOUD_PROJECT=your-project-id
-    GOOGLE_CLOUD_LOCATION=us-central1
-
-    # Used for Vertex AI, Dataform, and BigQuery GOOGLE_GENAI_USE_VERTEXAI=1
-    # Model Configuration
-
-    ROOT_AGENT_MODEL=gemini-2.5-pro
-
-    # Dataform Configuration
-
-    DATAFORM_REPOSITORY_NAME=your-repository-name
-
-    DATAFORM_WORKSPACE_NAME=your-workspace-name
-```
+    Edit the `.env` file with your configuration (see `.env.example` for all available options):
 
 ### Environment Variables
 
@@ -93,11 +124,12 @@ A comprehensive data engineering agent.
 -   `DATAFORM_REPOSITORY_NAME`: Your Dataform repository name
 -   `DATAFORM_WORKSPACE_NAME`: Your Dataform workspace name
 
-### Running the Agent
-   Run ADK from the upper folder: `cd .. adk web` or
-   `adk run`
+### Running the Agent Locally
+
+Run ADK from the upper folder: `cd .. adk web` or `adk run`
 
 ### Example
+
     # Prompt
     Enrich the `new_york_taxi_trips.tlc_green_trips_2022` table by generating date and time features from the `pickup_datetime` column. Use `new_york_taxi_trips` dataset for the enriched table.
 
@@ -117,20 +149,12 @@ A comprehensive data engineering agent.
 
     I have successfully compiled the Dataform project. The compilation was successful, and I have the pipeline's DAG.
 
-## Running Tests
-
-For running tests and evaluation, install the extra dependencies:
+### Development
 
 ```bash
-poetry install --with dev
-```
-
-Then the tests and evaluation can be run from the `financial-advisor` directory using
-the `pytest` module:
-
-```bash
-python3 -m pytest tests
-python3 -m pytest eval
+uv sync --dev
+uv run pytest tests
+uv run pytest eval
 ```
 
 `tests` runs the agent on a sample request, and makes sure that every component
@@ -138,14 +162,14 @@ is functional. `eval` is a demonstration of how to evaluate the agent, using the
 `AgentEvaluator` in ADK. It sends a couple requests to the agent and expects
 that the agent's responses match a pre-defined response reasonably well.
 
-## Deployment
+### Deployment
 
-The Financial Advisor can be deployed to Vertex AI Agent Engine using the following
+The Data Engineering Agent can be deployed to Vertex AI Agent Engine using the following
 commands:
 
 ```bash
-poetry install --with deployment
-python3 deployment/deploy.py --create
+uv sync --group deployment
+uv run deployment/deploy.py --create
 ```
 
 When the deployment finishes, it will print a line like this:
@@ -154,10 +178,10 @@ When the deployment finishes, it will print a line like this:
 Created remote agent: projects/<PROJECT_NUMBER>/locations/<PROJECT_LOCATION>/reasoningEngines/<AGENT_ENGINE_ID>
 ```
 
-If you forgot the AGENT_ENGINE_ID, you can list existing agents using:
+If you forget the AGENT_ENGINE_ID, you can list the existing agents using:
 
 ```bash
-python3 deployment/deploy.py --list
+uv run deployment/deploy.py --list
 ```
 
 The output will be like:
@@ -171,9 +195,10 @@ All remote agents:
 ```
 
 You may interact with the deployed agent using the `test_deployment.py` script
+
 ```bash
 $ export USER_ID=<any string>
-$ python3 deployment/test_deployment.py --resource_id=${AGENT_ENGINE_ID} --user_id=${USER_ID}
+$ uv run deployment/test_deployment.py --resource_id=${AGENT_ENGINE_ID} --user_id=${USER_ID}
 Found agent with resource ID: ...
 Created session for user ID: ...
 Type 'quit' to exit.
@@ -184,8 +209,10 @@ Response:
 To delete the deployed agent, you may run the following command:
 
 ```bash
-python3 deployment/deploy.py --delete --resource_id=${AGENT_ENGINE_ID}
+uv run deployment/deploy.py --delete --resource_id=${AGENT_ENGINE_ID}
 ```
+
+</details>
 
 # License
    Copyright 2025 Google LLC

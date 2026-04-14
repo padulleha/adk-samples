@@ -78,45 +78,107 @@ youtube-analyst/
 ### Prerequisites
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) (for dependency management)
-- Google Cloud Project (with Vertex AI enabled)
-- [YouTube Data API Key](https://developers.google.com/youtube/v3/getting-started)
+- [uv](https://docs.astral.sh/uv/) for dependency management and packaging
+  - See the official [uv website](https://docs.astral.sh/uv/) for installation.
 
-### Installation
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
-1.  **Clone the repository and navigate to the agent:**
-    ```bash
-    cd python/agents/youtube-analyst
-    ```
+- Google Cloud project (with Vertex AI enabled)
+- [YouTube Data API key](https://developers.google.com/youtube/v3/getting-started) with YouTube Data API v3 enabled
+- A local `.env` file (copy from `.env.example`) with your runtime credentials
 
-2.  **Install dependencies:**
-    ```bash
-    uv sync
-    ```
+## Agent Starter Pack (recommended)
 
-3.  **Configure Environment:**
-    Create a `.env` file in the `youtube-analyst` directory:
-    ```bash
-    GOOGLE_CLOUD_PROJECT=your-project-id
-    GOOGLE_CLOUD_LOCATION=global
-    GOOGLE_GENAI_USE_VERTEXAI=1
-    YOUTUBE_API_KEY=your-youtube-data-api-key
-    ```
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to scaffold a production-ready project and choose your deployment target ([Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) or [Cloud Run](https://cloud.google.com/run)), with CI/CD and other production features. The easiest way is with [uv](https://docs.astral.sh/uv/) (one command, no venv or pip install needed):
 
-## Usage
-
-### Running in CLI
-Interact with the agent directly in your terminal:
 ```bash
+uvx agent-starter-pack create my-youtube-analyst -a adk@youtube-analyst
+```
+
+If you don't have uv yet: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+
+The starter pack will prompt you to select deployment options and set up your Google Cloud project.
+
+<details>
+<summary>Alternative: Using pip + virtual environment</summary>
+
+```bash
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-youtube-analyst -a adk@youtube-analyst
+```
+
+</details>
+
+From your newly created project directory (e.g. `my-youtube-analyst`), copy the env template and configure credentials:
+
+```bash
+cp .env.example .env
+```
+
+Set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION=global`, `GOOGLE_GENAI_USE_VERTEXAI=1`, and `YOUTUBE_API_KEY`, then run:
+
+```bash
+cd my-youtube-analyst
+uv sync --dev
 uv run adk run youtube_analyst
 ```
 
-### Running with Web UI
-For a richer experience with interactive charts:
+For the Web UI (recommended for interactive charts):
+
 ```bash
 uv run adk web
 ```
-*Select `youtube_analyst` from the dropdown menu.*
+
+Then select `youtube_analyst` from the dropdown menu.
+
+---
+
+<details>
+<summary>Alternative: Local development (run from this sample repo)</summary>
+
+### Clone and install
+
+```bash
+git clone https://github.com/google/adk-samples.git
+cd adk-samples/python/agents/youtube-analyst
+```
+
+Stay in `python/agents/youtube-analyst` for the steps below.
+
+```bash
+uv sync
+```
+
+### Configuration
+
+Copy the environment template and edit values:
+
+```bash
+cp .env.example .env
+```
+
+Set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION=global`, `GOOGLE_GENAI_USE_VERTEXAI=1`, and `YOUTUBE_API_KEY`.
+
+### Running the agent locally
+
+**CLI:**
+
+```bash
+adk run .
+```
+
+**ADK web UI:**
+
+```bash
+adk web
+```
+
+Then select `youtube_analyst` from the dropdown.
+
+</details>
 
 ## Example Interactions
 

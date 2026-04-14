@@ -34,41 +34,116 @@ This diagram illustrates the agent's architecture:
 
 ## Setup and Installation
 
-1.  **Prerequisites**
+### Prerequisites
 
-    *   Python 3.11+
-    *   [Poetry](https://python-poetry.org/docs/) for dependency management.
+- Python 3.11+
+- uv for dependency management and packaging
+  - See the official [uv website](https://docs.astral.sh/uv/) for installation.
 
-2.  **Installation**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
-    ```bash
-    # Navigate to the agent's directory
-    cd adk-samples/python/agents/story-teller
-    # Install the package and dependencies.
-    poetry install
-    ```
+## Agent Starter Pack (recommended)
 
-3.  **Configuration**
+Use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to scaffold a production-ready project and choose your deployment target ([Vertex AI Agent Engine](https://cloud.google.com/vertex-ai/generative-ai/docs/agent-engine/overview) or [Cloud Run](https://cloud.google.com/run)), with CI/CD and other production features. The easiest way is with [uv](https://docs.astral.sh/uv/) (one command, no venv or pip install needed):
 
-    Set up the `GOOGLE_API_KEY` environment variable.
+```bash
+uvx agent-starter-pack create my-story-teller -a adk@story-teller-agent
+```
 
-## Running the Agent Locally
+If you don't have uv yet: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-You can run the agent locally using the `adk` command in your terminal.
+The starter pack will prompt you to select deployment options and set up your Google Cloud project.
 
-1.  **To run the agent from the CLI:**
+<details>
+<summary>Alternative: Using pip and a virtual environment</summary>
 
-    ```bash
-    adk run .
-    ```
+```bash
+# Create and activate a virtual environment
+python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
 
-2.  **To run the agent from the ADK web UI:**
+# Install the starter pack and create your project
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-story-teller -a adk@story-teller-agent
+```
 
-    ```bash
-    adk web
-    ```
+</details>
 
-    Then select `story-teller-agent` from the dropdown menu.
+From your newly created project directory (e.g. `my-story-teller`), run:
+
+```bash
+cd my-story-teller
+uv sync --dev
+uv run adk run story_teller_agent
+```
+
+For the web UI:
+
+```bash
+uv run adk web
+```
+
+Then select `story-teller-agent` from the dropdown menu.
+
+---
+
+<details>
+<summary>Alternative: Local development (run from this sample repo)</summary>
+
+### Agent Setup
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/google/adk-samples.git
+   cd adk-samples/python/agents/story_teller
+   ```
+
+   For the rest of this tutorial **ensure you remain in the `python/agents/story_teller` directory**.
+
+2. Install the dependencies:
+
+   ```bash
+   uv sync
+   ```
+
+3. Configure settings:
+
+   Set the `GOOGLE_API_KEY` environment variable (or use Application Default Credentials with Vertex AI). You can use a `.env` file or export in your shell, for example:
+
+   ```bash
+   export GOOGLE_CLOUD_PROJECT=my-project
+   export GOOGLE_CLOUD_LOCATION=my-region
+   # Optional: for Vertex AI
+   export GOOGLE_GENAI_USE_VERTEXAI=1
+   ```
+
+### Running the Agent Locally
+
+You can run the agent locally using the `adk` command in your terminal:
+
+1. To run the agent from the CLI:
+
+   ```bash
+   adk run .
+   ```
+
+2. To run the agent from the ADK web UI:
+
+   ```bash
+   adk web
+   ```
+   Then select `story-teller-agent` from the dropdown.
+
+### Development
+
+```bash
+uv sync --dev
+uv run pytest
+```
+
+</details>
 
 ## Example Interaction
 

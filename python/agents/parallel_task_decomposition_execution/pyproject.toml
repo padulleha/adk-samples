@@ -18,8 +18,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest>=8.3.2",
+    "pytest-asyncio>=0.23.7",
+    "google-adk[eval]>=1.0.0",
+    "nest-asyncio>=1.6.0",
+    "agent-starter-pack>=0.32.0",
 ]
 
 [tool.ruff]
@@ -37,3 +40,15 @@ packages = ["parallel_task_decomposition_execution"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_default_fixture_loop_scope = "function"
+
+# This configuration file is used by goo.gle/agent-starter-pack to power remote templating.
+# It defines the template's properties and settings.
+[tool.agent-starter-pack]
+example_question = "What is the current local time in Sydney, the current weather in New York, and the latest Bitcoin price in USD?"
+
+[tool.agent-starter-pack.settings]
+agent_directory = "parallel_task_decomposition_agent"

@@ -20,23 +20,33 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.26.0",
+    "google-adk[eval]>=1.0.0",
     "ruff>=0.4.6",
     "mypy>=1.18.2",
+    "agent-starter-pack>=0.32.0",
 ]
 
 [tool.ruff]
-# Point back to the Master template in the root
 extend = "../../../pyproject.toml"
 
 [tool.ruff.lint.isort]
-# Update "ai_security_agent" to match your actual folder name if it differs
 known-first-party = ["llm_red_team_agent", "app"]
 
 [tool.hatch.build.targets.wheel]
-# Ensures Hatchling bundles the correct source directories
 packages = ["llm_red_team_agent", "app"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.agent-starter-pack]
+example_question = "Run a red team security test for the Toxicity risk category."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "llm_red_team_agent"
+deployment_targets = ["agent_engine", "cloud_run"]
 
 [build-system]
 requires = ["hatchling"]

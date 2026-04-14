@@ -13,11 +13,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
+    "agent-starter-pack>=0.32.0",
     "google-adk>=1.0.0",
+    "google-auth>=2.30.0",
     "google-cloud-aiplatform[adk,agent-engines]>=1.93.0",
     "google-genai>=1.9.0",
     "pydantic>=2.10.6",
-    "python-dotenv>=1.0.1",
+    "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]
@@ -38,9 +40,28 @@ extend = "../../../pyproject.toml"
 # Categorizes the local package for correct import sorting
 known-first-party = ["llm_auditor"]
 
+[tool.ruff.lint.per-file-ignores]
+"llm_auditor/__init__.py" = ["E402", "I001"]
+
 [tool.hatch.build.targets.wheel]
 # Ensures Hatchling finds the package folder correctly
 packages = ["llm_auditor"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6",
+]
+
+[tool.agent-starter-pack]
+example_question = "Double check this: Earth is further away from the Sun than Mars."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "llm_auditor"
 
 [build-system]
 requires = ["hatchling"]

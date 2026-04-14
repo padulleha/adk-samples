@@ -19,12 +19,13 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 
-class Severity(str, StrEnum):
+class Severity(StrEnum):
+
     BLOCKER = "BLOCKER"
     WARNING = "WARNING"
 
 
-class Category(str, StrEnum):
+class Category(StrEnum):
     IMAGE = "IMAGE"
     VIDEO = "VIDEO"
 

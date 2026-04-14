@@ -24,6 +24,10 @@ dev = [
     "nest-asyncio>=1.6.0",
     "agent-starter-pack>=0.14.1",
     "jupyter>=1.1.1",
+]
+
+[project.optional-dependencies]
+lint = [
     "ruff>=0.4.6",
     "mypy>=1.19.0",
     "codespell>=2.4.1",
@@ -34,6 +38,9 @@ dev = [
 [tool.ruff]
 # Point back to the Master template in the root
 extend = "../../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402", "F401"]
 
 [tool.ruff.lint.isort]
 # Treat both app and frontend as internal packages
@@ -55,6 +62,9 @@ ignore_missing_imports = true
 explicit_package_bases = true
 disable_error_code = ["misc", "no-untyped-call", "no-any-return"]
 exclude = [".venv"]
+
+[tool.codespell]
+skip = "uv.lock,.venv,./frontend"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app", "frontend"]

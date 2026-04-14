@@ -19,6 +19,13 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
 ]
 
+[project.optional-dependencies]
+lint = [
+    "codespell>=2.2.0",
+    "ruff>=0.4.6",
+    "mypy>=1.14.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
@@ -26,7 +33,17 @@ dev = [
     "nest-asyncio>=1.6.0",
     "mypy>=1.14.0",
     "jupyter>=1.0.0",
+    "agent-starter-pack>=0.32.0",
 ]
+
+[tool.agent-starter-pack]
+example_question = "Create a short campfire story about a brave knight"
+
+[tool.agent-starter-pack.settings]
+agent_directory = "app"
+
+[tool.codespell]
+ignore-words-list = "rouge"
 
 [tool.ruff]
 # Point back to the Master template in the root

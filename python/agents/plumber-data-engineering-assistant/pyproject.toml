@@ -54,6 +54,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pre-commit>=4.2.0",
     "deptry>=0.23.0",
+    "agent-starter-pack>=0.32.0",
 ]
 
 [tool.ruff]
@@ -93,6 +94,9 @@ markers = [
     "slow: marks tests as slow",
     "infra_ready: marks tests as requiring cloud infra to be ready",
 ]
+
+[tool.agent-starter-pack]
+example_question = "Deploy a Dataflow pipeline to copy data from GCS to BigQuery"
 
 [tool.agent-starter-pack.settings]
 agent_directory = "plumber"

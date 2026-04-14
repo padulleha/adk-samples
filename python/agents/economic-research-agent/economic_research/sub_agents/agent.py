@@ -21,7 +21,7 @@ class JudgeAgent:
         # We use Gemini 2.5 flash as a lightweight, fast auditor
         return Agent(
             name="Auditor_Judge",
-            model=Gemini(model_name="gemini-2.1-flash"),
+            model=Gemini(model_name="gemini-2.5-flash"),
             instruction=JUDGE_INSTRUCTIONS,
             tools=tools,
         )

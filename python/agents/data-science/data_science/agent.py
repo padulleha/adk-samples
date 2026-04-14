@@ -46,7 +46,7 @@ from .sub_agents.bigquery.tools import (
 )
 from .tools import call_alloydb_agent, call_analytics_agent, call_bigquery_agent
 
-# Configure Weave endpoint and authentication
+# Configure Weave endpoint and authentication.
 _WANDB_BASE_URL = "https://trace.wandb.ai"
 _WANDB_PROJECT_ID = os.getenv("WANDB_PROJECT_ID")
 _OTEL_EXPORTER_OTLP_ENDPOINT = f"{_WANDB_BASE_URL}/otel/v1/traces"

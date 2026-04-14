@@ -10,6 +10,8 @@ AI-driven agent designed to facilitate the exploration of the academic landscape
 
 This capability aims to provide researchers with valuable insights into the ongoing impact of seminal research and to highlight promising avenues for novel investigation, thereby accelerating the research discovery process.
 
+The [Agent Starter Pack](https://goo.gle/agent-starter-pack) (ASP) is the **recommended** way to create a new project from this sample. The copy in [adk-samples](https://github.com/google/adk-samples) remains the upstream source for browsing and contributions.
+
 ## Agent Details
 
 The key features of the Academic Research include:
@@ -30,77 +32,90 @@ This diagram shows the detailed architecture of the agents and tools used
 to implement this workflow.
 <img src="academic-research.svg" alt="academic researcher" width="800"/>
 
-## Setup and Installation
+## Prerequisites
 
-1.  **Prerequisites**
+*   Python 3.10+
+*   [uv](https://docs.astral.sh/uv/getting-started/installation/) for dependency management
+*   A Google Cloud project (for Vertex / Gemini)
+*   [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`)
 
-    *   Python 3.10+
-    *   uv
-        *   For dependency management and packaging. Please follow the
-            instructions on the official
-            [uv website](https://docs.astral.sh/uv/) for installation.
+### Recommended: Using Agent Starter Pack
 
-        ```bash
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        ```
+The Agent Starter Pack is the recommended way to create and deploy a production-ready version of this agent. Start from a new directory (replace `my-academic-research` with your project name):
 
-    * A project on Google Cloud Platform
-    * Google Cloud CLI
-        *   For installation, please follow the instruction on the official
-            [Google Cloud website](https://cloud.google.com/sdk/docs/install).
+```bash
+uvx agent-starter-pack create my-academic-research -a adk@academic-research
+cd my-academic-research
+```
 
-2.  **Installation**
+Install dependencies (including dev tools for tests and evaluation):
 
-    ```bash
-    # Clone this repository.
-    git clone https://github.com/google/adk-samples.git
-    cd adk-samples/python/agents/academic-research
-    # Install the package and dependencies.
-    uv sync
-    ```
+```bash
+uv sync --group dev
+```
 
-3.  **Configuration**
+Configure Google Cloud. You may set the following in your shell or in a `.env` file:
 
-    *   Set up Google Cloud credentials.
+```bash
+export GOOGLE_GENAI_USE_VERTEXAI=true
+export GOOGLE_CLOUD_PROJECT=<your-project-id>
+export GOOGLE_CLOUD_LOCATION=<your-project-location>
+export GOOGLE_CLOUD_STORAGE_BUCKET=<your-storage-bucket>  # Only required for deployment on Agent Engine
+```
 
-        *   You may set the following environment variables in your shell, or in
-            a `.env` file instead.
+Authenticate:
 
-        ```bash
-        export GOOGLE_GENAI_USE_VERTEXAI=true
-        export GOOGLE_CLOUD_PROJECT=<your-project-id>
-        export GOOGLE_CLOUD_LOCATION=<your-project-location>
-        export GOOGLE_CLOUD_STORAGE_BUCKET=<your-storage-bucket>  # Only required for deployment on Agent Engine
-        ```
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project $GOOGLE_CLOUD_PROJECT
+```
 
-    *   Authenticate your GCloud account.
+During setup, the starter pack will prompt you for deployment options and adds production-oriented tooling (for example automated CI/CD deployment scripts).
 
-        ```bash
-        gcloud auth application-default login
-        gcloud auth application-default set-quota-project $GOOGLE_CLOUD_PROJECT
-        ```
+<details>
+<summary>Alternative: install Agent Starter Pack with pip</summary>
+
+```bash
+python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install --upgrade agent-starter-pack
+agent-starter-pack create my-academic-research -a adk@academic-research
+cd my-academic-research
+```
+
+Then continue with `uv sync --group dev` and the configuration steps above.
+
+</details>
+
+<details>
+<summary>Clone this repository directly (contributors and advanced use)</summary>
+
+Use this workflow when working against the upstream repository (for example to open a pull request). **New projects should still use the Agent Starter Pack** as described above.
+
+```bash
+git clone https://github.com/google/adk-samples.git
+cd adk-samples/python/agents/academic-research
+uv sync --group dev
+```
+
+Set the same environment variables (or use a `.env` file) and run `gcloud auth application-default login` as in the recommended path. Run the agent and tests with the same commands as below.
+
+</details>
 
 ## Running the Agent
 
-**Using `adk`**
-
-ADK provides convenient ways to bring up agents locally and interact with them.
-You may talk to the agent using the CLI:
+From your project directory:
 
 ```bash
-adk run academic_research
+uv run adk run academic_research
 ```
 
-Or on a web interface:
+Or use the web UI:
 
 ```bash
- adk web
+uv run adk web
 ```
 
-The command `adk web` will start a web server on your machine and print the URL.
-You may open the URL, select "academic_research" in the top-left drop-down menu, and
-a chatbot interface will appear on the right. The conversation is initially
-blank. Here are some example requests you may ask the Academic Research to verify:
+The `adk web` command starts a local server and prints a URL. Open it, select **academic_research** in the drop-down, and use the chat UI. The conversation starts blank. Here are some example requests you may use to verify the agent:
 
 ```
 who are you
@@ -339,7 +354,7 @@ Would you like to dive deeper into any of these specific research directions, or
 For running tests and evaluation, install the extra dependencies:
 
 ```bash
-uv sync --dev
+uv sync --group dev
 ```
 
 Then the tests and evaluation can be run from the `academic-research` directory using
@@ -407,32 +422,6 @@ To delete the deployed agent, you may run the following command:
 ```bash
 uv run deployment/deploy.py --delete --resource_id=${AGENT_ENGINE_ID}
 ```
-
-### Alternative: Using Agent Starter Pack
-
-You can also use the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a production-ready version of this agent with additional deployment options:
-
-```bash
-# Create and activate a virtual environment
-python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
-
-# Install the starter pack and create your project
-pip install --upgrade agent-starter-pack
-agent-starter-pack create my-academic-research -a adk@academic-research
-```
-
-<details>
-<summary>⚡️ Alternative: Using uv</summary>
-
-If you have [`uv`](https://github.com/astral-sh/uv) installed, you can create and set up your project with a single command:
-```bash
-uvx agent-starter-pack create my-academic-research -a adk@academic-research
-```
-This command handles creating the project without needing to pre-install the package into a virtual environment.
-
-</details>
-
-The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
 
 ## Customization
 

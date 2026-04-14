@@ -1,4 +1,4 @@
-# On-Brand MediaGen Agent
+# On-Brand GenMedia Agent
 
 This agent generates and evaluates images based on text descriptions while ensuring compliance with predefined policies. It functions as an automated image generation and validation system that maintains high standards of quality and policy compliance, iteratively improving images until they satisfy requirements. This repository uses a fictitious company, **NeuroVibe AI**, as an example to demonstrate brand guideline enforcement.
 

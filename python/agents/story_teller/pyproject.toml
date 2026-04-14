@@ -17,6 +17,12 @@ dev = [
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
     "ruff>=0.4.6",
+    "agent-starter-pack>=0.32.0",
+]
+
+[project.optional-dependencies]
+lint = [
+    "ruff>=0.4.6",
 ]
 
 [tool.ruff]
@@ -26,6 +32,12 @@ extend = "../../../pyproject.toml"
 [tool.ruff.lint.isort]
 # Tells Ruff that 'story_teller_agent' is THIS sample's code
 known-first-party = ["story_teller_agent"]
+
+[tool.agent-starter-pack]
+example_question = "A sci-fi mystery about a detective investigating a murder on a space station."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "story_teller_agent"
 
 [build-system]
 requires = ["hatchling"]

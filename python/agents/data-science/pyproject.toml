@@ -35,6 +35,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "google-adk[eval]>=1.14",
     "ruff>=0.4.6",
+    "agent-starter-pack>=0.14.1",
 ]
 
 [tool.ruff]
@@ -64,6 +65,12 @@ log_cli_format = "[%(asctime)s] %(levelname)s (%(funcName)s) \t [%(pathname)s:%(
 filterwarnings = [
     "ignore::UserWarning",
 ]
+
+[tool.agent-starter-pack]
+example_question = "What data do you have access to?"
+
+[tool.agent-starter-pack.settings]
+agent_directory = "data_science"
 
 [build-system]
 requires = ["hatchling"]
