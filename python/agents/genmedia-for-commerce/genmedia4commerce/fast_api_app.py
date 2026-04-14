@@ -25,13 +25,13 @@ if str(GENMEDIA_DIR) not in sys.path:
     sys.path.insert(0, str(GENMEDIA_DIR))
 
 # Load config.env
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
 config_path = GENMEDIA_DIR / "config.env"
 if config_path.exists():
     load_dotenv(config_path)
 
-import logging
+import logging  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 
