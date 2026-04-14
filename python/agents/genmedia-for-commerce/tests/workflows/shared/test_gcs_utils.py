@@ -476,11 +476,11 @@ class TestUploadFolderToGcs:
         temp_folder_with_files,
     ):
         """Should pass max_workers to transfer manager."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
         mock_upload_many.return_value = [None, None, None, None]
 
-        temp_dir, files = temp_folder_with_files
+        temp_dir, _ = temp_folder_with_files
 
         upload_folder_to_gcs(
             bucket_name="test-bucket",
@@ -498,7 +498,7 @@ class TestUploadBytesToGcsIntegration:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_upload_image_bytes(self, mock_get_client, mock_storage_client):
         """Should upload PNG image bytes correctly."""
-        client, bucket, blob = mock_storage_client
+        client, _, blob = mock_storage_client
         mock_get_client.return_value = client
 
         # Create actual PNG bytes
@@ -525,7 +525,7 @@ class TestUploadBytesToGcsIntegration:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_upload_video_bytes(self, mock_get_client, mock_storage_client):
         """Should upload video bytes correctly."""
-        client, bucket, blob = mock_storage_client
+        client, _, blob = mock_storage_client
         mock_get_client.return_value = client
 
         video_bytes = b"fake_video_mp4_content"
