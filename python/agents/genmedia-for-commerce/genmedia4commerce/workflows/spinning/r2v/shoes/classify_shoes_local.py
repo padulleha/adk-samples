@@ -35,6 +35,7 @@ from PIL import Image
 
 from workflows.shared.gemini import embed_gemini
 from workflows.shared.utils import predict_parallel
+from genmedia4commerce.config import BACKEND_ASSETS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,6 @@ CLASSES = [
 ]
 _INVALID_IDX = CLASSES.index("invalid")
 _V1_OVERRIDE_CONF = 0.99
-
-from genmedia4commerce.config import BACKEND_ASSETS_DIR
 
 _SHOES_ASSETS = BACKEND_ASSETS_DIR / "spinning" / "r2v" / "shoes"
 _WEIGHTS_V2_PATH = str(_SHOES_ASSETS / "shoe_classifier_numpy_v2.npz")
