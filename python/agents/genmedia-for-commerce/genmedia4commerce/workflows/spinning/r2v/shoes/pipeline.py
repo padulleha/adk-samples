@@ -281,19 +281,19 @@ def preprocess_classify_images(
 
     images_to_split = [
         img_bytes
-        for img_bytes, pred in zip(images_bytes_list, initial_predictions)
+        for img_bytes, pred in zip(images_bytes_list, initial_predictions, strict=True)
         if pred.strip().lower() == "multiple"
     ]
 
     single_images_valid = [
         img_bytes
-        for img_bytes, pred in zip(images_bytes_list, initial_predictions)
+        for img_bytes, pred in zip(images_bytes_list, initial_predictions, strict=True)
         if pred.strip().lower() not in ["multiple", "invalid"]
     ]
 
     single_images_pred = [
         pred.strip().lower()
-        for _, pred in zip(images_bytes_list, initial_predictions)
+        for _, pred in zip(images_bytes_list, initial_predictions, strict=True)
         if pred.strip().lower() not in ["multiple", "invalid"]
     ]
 
