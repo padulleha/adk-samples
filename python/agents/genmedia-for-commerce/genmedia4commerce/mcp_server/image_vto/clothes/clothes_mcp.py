@@ -49,7 +49,7 @@ async def run_image_vto_clothes(
         try:
             return base64.b64decode(val)
         except Exception as e:
-            raise ValueError(f"Invalid base64 for {label}: {e}")
+            raise ValueError(f"Invalid base64 for {label}: {e}") from e
 
     try:
         full_body_bytes = _decode_image(full_body_image_base64, "full body image")
