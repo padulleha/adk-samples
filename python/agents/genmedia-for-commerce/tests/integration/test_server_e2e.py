@@ -172,6 +172,7 @@ def test_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
         ):
             has_text_content = True
             break
+    assert has_text_content, "No text content received in stream"
 
 
 def test_chat_stream_error_handling(server_fixture: subprocess.Popen[str]) -> None:
