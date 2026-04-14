@@ -250,7 +250,7 @@ class TestDownloadFileFromGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_creates_parent_directories(self, mock_get_client, mock_storage_client):
         """Should create parent directories if they don't exist."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -268,7 +268,7 @@ class TestDownloadFileFromGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_passes_project_id(self, mock_get_client, mock_storage_client):
         """Should pass project ID to client."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         with tempfile.TemporaryDirectory() as temp_dir:
