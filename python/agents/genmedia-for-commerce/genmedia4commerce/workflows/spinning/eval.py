@@ -212,7 +212,7 @@ Only return the JSON object, nothing else."""
     try:
         text_part = ["Analyze this product spinning video for glitches:"]
         response_text = generate_gemini(
-            text_images_pieces=([video_bytes] + text_part),
+            text_images_pieces=[video_bytes, *text_part],
             client=client,
             config=config,
             model=model,
