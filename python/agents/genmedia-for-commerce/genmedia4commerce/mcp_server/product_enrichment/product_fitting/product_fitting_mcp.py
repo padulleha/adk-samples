@@ -25,7 +25,7 @@ from workflows.product_enrichment.product_fitting.pipeline import run_fitting_pi
 logger = logging.getLogger(__name__)
 
 # Model photo presets directory
-from genmedia4commerce.config import BACKEND_ASSETS_DIR
+from genmedia4commerce.config import BACKEND_ASSETS_DIR  # noqa: E402
 
 MODELS_DIR = BACKEND_ASSETS_DIR / "product_enrichment" / "product_fitting" / "models"
 REQUIRED_MODEL_PHOTOS = {"front_top", "front_bottom"}
@@ -121,7 +121,7 @@ async def run_product_fitting(
         try:
             return base64.b64decode(val)
         except Exception as e:
-            raise ValueError(f"Invalid base64 for {label}: {e}")
+            raise ValueError(f"Invalid base64 for {label}: {e}") from e
 
     garment_images_bytes: list[bytes | str] = []
     for idx, img_b64 in enumerate(garment_images_base64):
