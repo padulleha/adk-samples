@@ -240,7 +240,7 @@ def run_dataproc_template(
 
         # IF NEED TO INTEGRATE TRANSFORMATION LOGIC
         if TRANSFORMATION_SQL:
-            template_file_name = template_path.split("/")[-1]
+            template_file_name = template_path.rsplit("/", 1)[-1]
             template_dir = os.path.dirname(template_path)
 
             # CREATE THE TEMP TEMPLATE REPO WITH INTEGRATED TRANSFORMATION LOGIC
