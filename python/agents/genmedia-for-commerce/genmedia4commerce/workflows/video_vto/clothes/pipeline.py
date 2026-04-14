@@ -237,7 +237,7 @@ async def run_animate_model(
         logger.info(f"[AnimateModel] Face similarity scores: {scores}")
 
         ranked = sorted(
-            zip(scores, r2v_result["videos"]),
+            zip(scores, r2v_result["videos"], strict=True),
             key=lambda x: x[0],
             reverse=True,
         )
@@ -246,7 +246,7 @@ async def run_animate_model(
 
         filtered = [
             (s, v)
-            for s, v in zip(scores, sorted_videos)
+            for s, v in zip(scores, sorted_videos, strict=True)
             if s >= MIN_SIMILARITY_THRESHOLD
         ]
         rejected = len(sorted_videos) - len(filtered)
