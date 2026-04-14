@@ -449,10 +449,10 @@ def frames_in_extremity_class(
 
 
 def validate_and_fix_product_spin_consistency_r2v(
-    video_bytes: bytes = None,
+    video_bytes: bytes | None = None,
     client=None,
     model=None,
-    pre_classified_frames: list[str] = None,
+    pre_classified_frames: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Validates if a product spin video follows a consistent rotation path.
@@ -501,11 +501,11 @@ def validate_and_fix_product_spin_consistency_r2v(
     if sampled_indices is not None:
         filtered = [
             (c, i)
-            for c, i in zip(product_position_frames, sampled_indices)
+            for c, i in zip(product_position_frames, sampled_indices, strict=True)
             if c != "invalid"
         ]
         if filtered:
-            product_position_frames, sampled_indices = zip(*filtered)
+            product_position_frames, sampled_indices = zip(*filtered, strict=True)
             product_position_frames = list(product_position_frames)
             sampled_indices = list(sampled_indices)
     else:
@@ -524,7 +524,7 @@ def validate_and_fix_product_spin_consistency_r2v(
             frame_list,
         )
     else:
-        is_valid_spin, reversed, message_valid, corrected_path = is_valid(
+        is_valid_spin, reversed, message_valid, _ = is_valid(
             product_position_frames, strict=False
         )
 
@@ -597,7 +597,7 @@ def validate_and_fix_product_spin_consistency_r2v(
                 total_frames = len(frame_list)
                 filtered = [
                     (idx, position)
-                    for idx, position in zip(sampled_indices, product_position_frames)
+                    for idx, position in zip(sampled_indices, product_position_frames, strict=True)
                     if idx < cropped_index
                 ]
                 sampled_indices = [idx for idx, _ in filtered]
