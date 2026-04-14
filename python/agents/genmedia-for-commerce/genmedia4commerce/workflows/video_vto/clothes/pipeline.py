@@ -211,7 +211,7 @@ async def run_animate_model(
 
         r2v_result = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: run_r2v_pipeline(
+            lambda eval_ref=eval_ref: run_r2v_pipeline(
                 veo_client=veo_client,
                 upscale_client=None,
                 model_image_bytes=model_image,
