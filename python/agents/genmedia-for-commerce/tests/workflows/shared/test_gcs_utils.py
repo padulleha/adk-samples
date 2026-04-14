@@ -121,7 +121,7 @@ class TestUploadBytesToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_passes_project_id(self, mock_get_client, mock_storage_client):
         """Should pass project ID to client."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         upload_bytes_to_gcs(
@@ -136,7 +136,7 @@ class TestUploadBytesToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_returns_gcs_uri(self, mock_get_client, mock_storage_client):
         """Should return correct GCS URI."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         result = upload_bytes_to_gcs(
@@ -154,7 +154,7 @@ class TestUploadFileToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_uploads_file(self, mock_get_client, mock_storage_client):
         """Should upload file from path."""
-        client, bucket, blob = mock_storage_client
+        client, _, blob = mock_storage_client
         mock_get_client.return_value = client
 
         # Create temp file
