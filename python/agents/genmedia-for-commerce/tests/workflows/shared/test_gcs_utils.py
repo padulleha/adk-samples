@@ -106,7 +106,7 @@ class TestUploadBytesToGcs:
     @patch("workflows.shared.gcs_utils.get_storage_client")
     def test_sets_content_type(self, mock_get_client, mock_storage_client):
         """Should set content type when provided."""
-        client, bucket, blob = mock_storage_client
+        client, _, blob = mock_storage_client
         mock_get_client.return_value = client
 
         upload_bytes_to_gcs(
