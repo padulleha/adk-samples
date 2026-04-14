@@ -62,21 +62,21 @@ root_logger.addHandler(_console_handler)
 logger = logging.getLogger("mcp_server")
 logger.info("MCP server starting")
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
-from mcp_server.image_vto.image_vto_mcp import run_image_vto
-from mcp_server.other.background_changer.background_changer_mcp import (
+from mcp_server.image_vto.image_vto_mcp import run_image_vto  # noqa: E402
+from mcp_server.other.background_changer.background_changer_mcp import (  # noqa: E402
     run_background_changer,
 )
 
 # Import all MCP tool functions
-from mcp_server.product_enrichment.product_fitting.product_fitting_mcp import (
+from mcp_server.product_enrichment.product_fitting.product_fitting_mcp import (  # noqa: E402
     run_product_fitting,
 )
-from mcp_server.shared.catalog.catalog_mcp import run_catalog_search
-from mcp_server.spinning.spinning_mcp import run_product_spinning
-from mcp_server.video_vto.clothes.clothes_mcp import run_animate_model_mcp
-from mcp_server.video_vto.video_vto_mcp import run_video_vto
+from mcp_server.shared.catalog.catalog_mcp import run_catalog_search  # noqa: E402
+from mcp_server.spinning.spinning_mcp import run_product_spinning  # noqa: E402
+from mcp_server.video_vto.clothes.clothes_mcp import run_animate_model_mcp  # noqa: E402
+from mcp_server.video_vto.video_vto_mcp import run_video_vto  # noqa: E402
 
 server = FastMCP(
     "genmedia-retail",
