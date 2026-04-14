@@ -128,7 +128,7 @@ def compute_metrics(y_true, y_pred):
     acc = accuracy_score(y_true, y_pred)
     f1m = f1_score(y_true, y_pred, labels=CLASSES, average="macro", zero_division=0)
     f1w = f1_score(y_true, y_pred, labels=CLASSES, average="weighted", zero_division=0)
-    errors = int(sum(1 for a, b in zip(y_true, y_pred) if a != b))
+    errors = int(sum(1 for a, b in zip(y_true, y_pred, strict=True) if a != b))
 
     # Side-to-side errors
     s2s = sum(
