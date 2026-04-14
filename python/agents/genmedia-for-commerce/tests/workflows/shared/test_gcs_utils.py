@@ -432,7 +432,7 @@ class TestUploadFolderToGcs:
         self, mock_get_client, mock_upload_many, mock_storage_client
     ):
         """Should return empty list for empty folder."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -454,11 +454,11 @@ class TestUploadFolderToGcs:
         temp_folder_with_files,
     ):
         """Should raise exception when upload fails."""
-        client, bucket, blob = mock_storage_client
+        client, _, _ = mock_storage_client
         mock_get_client.return_value = client
         mock_upload_many.return_value = [None, Exception("Upload failed"), None, None]
 
-        temp_dir, files = temp_folder_with_files
+        temp_dir, _ = temp_folder_with_files
 
         with pytest.raises(Exception, match="Failed to upload"):
             upload_folder_to_gcs(
