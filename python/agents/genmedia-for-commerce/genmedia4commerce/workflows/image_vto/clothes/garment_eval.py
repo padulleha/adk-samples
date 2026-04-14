@@ -73,7 +73,7 @@ def evaluate_garments(
                 garment_description=desc.get("general", ""),
             )
             for garment_bytes, desc in zip(
-                garment_images_bytes_list, garment_descriptions
+                garment_images_bytes_list, garment_descriptions, strict=True
             )
         ]
         garment_details = [f.result() for f in futures]
