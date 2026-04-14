@@ -378,7 +378,7 @@ def preprocess_classify_images(
                 f"{final_classifications}"
             )
             return (
-                list(zip(all_valid_images, final_classifications)),
+                list(zip(all_valid_images, final_classifications, strict=True)),
                 video_gen_status,
                 True,
             )
@@ -425,7 +425,7 @@ def preprocess_classify_images(
     logger.info(f"Final classifications: {final_classifications}")
 
     return (
-        list(zip(all_valid_images, final_classifications)),
+        list(zip(all_valid_images, final_classifications, strict=True)),
         video_gen_status,
         has_velcro,
     )
