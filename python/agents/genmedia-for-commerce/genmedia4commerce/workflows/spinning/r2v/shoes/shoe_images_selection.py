@@ -162,7 +162,7 @@ def pick_images_by_ordered_best_side(
     for img, side in images_classified:
         side_image_dict[side].append(img)
 
-    available_side = [x for x in class_order + ["top_front"] if x in side_image_dict]
+    available_side = [x for x in [*class_order, "top_front"] if x in side_image_dict]
     for side in available_side:
         # If multiple images for the same side, pick the most complete one
         if len(side_image_dict[side]) > 1:
