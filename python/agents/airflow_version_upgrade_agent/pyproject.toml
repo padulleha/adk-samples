@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 
 dependencies = [
-    "google-adk==1.28.0",
+    "google-adk==1.28.1",
     "mcp>=1.26.0",
     "google-cloud-aiplatform>=1.144.0",
     "google-cloud-storage>=3.10.0",
@@ -25,7 +25,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.3",
+    "pytest>=9.0.3",
     "pytest-mock>=3.14.0",
     "pytest-asyncio>=0.26.0",
     "agent-starter-pack>=0.14.1",
