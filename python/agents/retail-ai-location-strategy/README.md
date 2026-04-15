@@ -50,22 +50,27 @@ Given a location and business type, this pipeline automatically:
 - Generates strategic recommendations with extended reasoning
 - Produces an HTML executive report and visual infographic
 
----
+## Run this agent
 
-## Getting Started: From Zero to Running Agent in 5 Minutes
+> [!IMPORTANT]
+> This agent uses the Agent Starter Pack, which is the fastest and easiest way to run and customize this agent.
 
-**Prerequisites:**
-- **[Python 3.10-3.12](https://www.python.org/downloads/)**
-- **[uv](https://github.com/astral-sh/uv)** (recommended) or pip
-- **[Google Maps API key](https://console.cloud.google.com/apis/credentials)** (with Places API enabled)
-- **[Node.js 18+](https://nodejs.org/)** *(only required for AG-UI frontend)*
+From the `python` directory, run the following command:
 
-You have two options to get started. Choose the one that best fits your setup:
+```shell
+uvx agent start retail-ai-location-strategy
+```
 
-*   A. **[Google AI Studio (Recommended)](#a-google-ai-studio-recommended)**: The quickest way to get started using a **Google AI Studio API key**. This method involves cloning the sample repository.
-*   B. **[Google Cloud Vertex AI](#b-google-cloud-vertex-ai)**: Choose this path if you want to use an existing **Google Cloud project** for authentication and deployment. This method generates a new, prod-ready project using the [agent-starter-pack](https://goo.gle/agent-starter-pack) including all the deployment scripts required.
+This will start the agent and make it available to call from the command line.
 
----
+In a separate terminal, you can chat with this agent by running:
+
+```shell
+uvx agent chat retail-ai-location-strategy -- -q "I want to open a coffee shop in Indiranagar, Bangalore"
+```
+
+<details>
+<summary>Alternative: Set up and run manually</summary>
 
 ### A. Google AI Studio (Recommended)
 
@@ -144,7 +149,20 @@ Then run `make install && make dev` to start the agent.
 </details>
 
 #### Step 1: Create Project from Template
+
 This command uses the [Agent Starter Pack](https://goo.gle/agent-starter-pack) to create a new directory (`my-retail-agent`) with all the necessary code.
+
+```bash
+uvx agent-starter-pack create my-retail-agent -a adk@retail-ai-location-strategy
+```
+
+The starter pack will prompt you to select deployment options and provides additional production-ready features including automated CI/CD deployment scripts.
+
+<details>
+<summary>⚡️ Alternative: Using pip</summary>
+
+If you don't have `uv` installed, you can use pip:
+
 ```bash
 # Create and activate a virtual environment
 python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\activate
@@ -153,17 +171,8 @@ python -m venv .venv && source .venv/bin/activate # On Windows: .venv\Scripts\ac
 pip install --upgrade agent-starter-pack
 agent-starter-pack create my-retail-agent -a adk@retail-ai-location-strategy
 ```
-<details>
-<summary>⚡️ Alternative: Using uv</summary>
 
-If you have [`uv`](https://github.com/astral-sh/uv) installed, you can create and set up your project with a single command:
-```bash
-uvx agent-starter-pack create my-retail-agent -a adk@retail-ai-location-strategy
-```
-This command handles creating the project without needing to pre-install the package into a virtual environment.
 </details>
-
-You'll be prompted to select a deployment option (Agent Engine or Cloud Run) and verify your Google Cloud credentials.
 
 #### Step 2: Install & Run
 Navigate into your **newly created project folder**, then install dependencies and start the server.
@@ -281,8 +290,8 @@ Open `http://localhost:3000` to see the interactive dashboard.
 ```bash
 # Terminal 1: Start the backend
 cd app/frontend/backend
-pip install -r requirements.txt
-python main.py
+uv pip install -r requirements.txt
+uv run main.py
 # Runs at http://localhost:8000
 
 # Terminal 2: Start the frontend

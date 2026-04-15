@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Invoice Processing -- Unified inference and learning agent for invoice processing"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-keywords = ["adk", "invoice", "document-processing", "agent", "gemini", "vertex-ai"]
+keywords = ['agent-catalog', 'adk', 'agent']
 readme = "README.md"
 
 authors = [
@@ -25,11 +25,28 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/GoogleCloudPlatform/adk-samples"
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "ruff>=0.15.9",
+    "agent-starter-pack>=0.14.1",
 ]
+
+[tool.agent_packs]
+template = "adk"
+
+[tool.agent-starter-pack]
+example_question = "Process the invoice for case_001."
+
+[tool.agent-starter-pack.settings]
+agent_directory = "invoice_processing"
 
 [tool.ruff]
 # extends the ruff rules established in the root .toml
 extend = "../../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
