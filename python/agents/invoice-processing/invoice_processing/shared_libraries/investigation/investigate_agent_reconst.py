@@ -5,28 +5,6 @@ Agent Processing Investigation Script (Reconstructed Rules Book)
 Version: 2.1.0
 Last Updated: 2026-02-16
 
-Changelog:
-- v2.1.0: DOMAIN-INDEPENDENT VERSION - Adapted for general invoice processing agent:
-          * Removed all Woolworths/organization-specific entity lists and references
-          * Updated directory paths to match general_invoice_agent.py output structure
-          * Updated agent file mappings (02_extraction.json, 09_audit_log.json, etc.)
-          * Replaced EWAF with WAF throughout (general agent uses WAF not EWAF)
-          * Removed BigQuery and Maximo references from validation prompts
-          * Removed Phase 2.5 (external validation) — general agent has no Phase 2.5
-          * Updated preprocessing fields to match general agent schema
-          * Updated labour keywords to match general_invoice_agent.py
-          * Made entity whitelist validation configurable instead of hardcoded
-          * All LLM prompts updated to be organization-agnostic
-- v2.0.2: FULLY DYNAMIC LAYER 3 - No hardcoded checks, ultra-conservative LLM
-- v2.0.0: DYNAMIC RULES ARCHITECTURE - 3-layer validation
-- v1.5.0: CONSERVATIVE UPDATE - Significantly reduce false positives
-- v1.4.0: Major improvements to minimize false positives
-- v1.3.1: Critical fix for false positives from missing phase files
-- v1.3.0: Major improvements to reduce false positives
-- v1.2.0: Fixed Phase 2 false positive data source violations
-- v1.1.0: Bug fixes for WAF detection and fraud indicator cases
-- v1.0.0: Initial release with reconstructed_rules_book.md validation
-
 This script validates agent behavior against reconstructed_rules_book.md (v1.1.1)
 which contains the validation rules including:
 - Phase 1: Initial Intake (extraction, customer, tax compliance, WAF, single invoice)

@@ -275,7 +275,10 @@ class OutputFormatter:
 
                     # Determine shift type from start time
                     hour = int(start_time.split(":")[0])
-                    if hour >= NIGHT_SHIFT_START_HOUR or hour < DAY_SHIFT_START_HOUR:
+                    if (
+                        hour >= NIGHT_SHIFT_START_HOUR
+                        or hour < DAY_SHIFT_START_HOUR
+                    ):
                         shift_type = "N"  # Night
                     elif hour >= EVENING_SHIFT_START_HOUR:
                         shift_type = "E"  # Evening
@@ -388,7 +391,11 @@ class OutputFormatter:
         result += "\n\n"
 
         # Parse sections
-        sections: dict[str, Any] = {"available": [], "limited": [], "unavailable": []}
+        sections: dict[str, Any] = {
+            "available": [],
+            "limited": [],
+            "unavailable": [],
+        }
 
         current_section = None
         for raw_line in text.split("\n"):

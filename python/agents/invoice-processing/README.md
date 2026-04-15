@@ -17,7 +17,7 @@ A unified ADK agent for document processing that combines an end-to-end inferenc
 | **ADK Pattern** | `LlmAgent` + 18 `FunctionTools` |
 | **Model** | gemini-2.5-flash |
 | **Framework** | [Google Agent Development Kit (ADK)](https://google.github.io/adk-docs/) |
-| **Structure** | Follows [Atomic Agents Guidelines](https://docs.google.com/document/d/1zbC9N-e0JCWUu0np4kCQrt2QnXVUJZP1qEPl6xiJBI4/edit) |
+
 
 ### Key Features
 
@@ -239,7 +239,7 @@ The diagram above illustrates the three-zone architecture of the Invoice Process
 ### Folder Structure
 
 ```
-invoice_processing/
+invoice-processing/
 ├── invoice_processing/                      # Python package (fully self-contained)
 │   ├── __init__.py                 # Exports root_agent
 │   ├── agent.py                    # LlmAgent + run_inference pipeline + root_agent
@@ -301,7 +301,7 @@ invoice_processing/
 
 ```bash
 # Navigate to the agent directory
-cd agents/invoice_processing
+cd agents/invoice-processing
 
 # Install dependencies using uv
 uv sync
@@ -432,13 +432,13 @@ The evaluation framework lives in [`eval/`](eval/) and provides schema-driven as
 ```bash
 # Full evaluation (deterministic + LLM)
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output
 
 # Deterministic only (no LLM, no cost)
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output \
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output \
     --skip-llm
 
 # Single case evaluation
@@ -446,12 +446,12 @@ uv run eval/eval.py --case case_001
 
 # Custom financial tolerance
 uv run eval/eval.py \
-    --ground-truth agents/invoice_processing/invoice_processing/exemplary_data \
-    --agent-output agents/invoice_processing/invoice_processing/data/agent_output \
+    --ground-truth agents/invoice-processing/invoice_processing/exemplary_data \
+    --agent-output agents/invoice-processing/invoice_processing/data/agent_output \
     --tolerance 0.05
 
 # Compare original vs ALF-revised output (before/after diff)
-python agents/invoice_processing/eval/compare_postprocessing.py
+python agents/invoice-processing/eval/compare_postprocessing.py
 ```
 
 Results are saved to `invoice_processing/data/eval_results/`.
@@ -460,7 +460,7 @@ Results are saved to `invoice_processing/data/eval_results/`.
 
 ## Deployment
 
-To deploy Invoice Processing to a cloud environment, follow the [ADK Samples Integration](https://g3doc.corp.google.com/cloud/ml/applications/vision/model_garden/g3doc/adk_samples_integration.md?cl=head) instructions to deploy via Agent Starter Pack.
+To deploy Invoice Processing to a cloud environment, follow the [ADK Samples Integration](https://googlecloudplatform.github.io/agent-starter-pack/guide/getting-started.html) instructions to deploy via Agent Starter Pack.
 
 See [`deployment/README.md`](deployment/README.md) for details.
 

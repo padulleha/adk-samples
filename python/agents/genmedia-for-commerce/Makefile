@@ -147,7 +147,7 @@ lint:
 # For non-interactive use, set env vars: ID or GEMINI_ENTERPRISE_APP_ID (full GE resource name)
 # Optional env vars: GEMINI_DISPLAY_NAME, GEMINI_DESCRIPTION, GEMINI_TOOL_DESCRIPTION, AGENT_ENGINE_ID
 register-gemini-enterprise:
-	@uvx agent-starter-pack@0.39.6 register-gemini-enterprise
+	@uvx agent-starter-pack@0.41.0 register-gemini-enterprise
 
 # ==============================================================================
 # Local Development

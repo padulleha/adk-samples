@@ -71,7 +71,9 @@ def get_available_nurses() -> str:
     return result
 
 
-def generate_shifts(start_date: datetime | None = None, num_days: int = 7) -> list:
+def generate_shifts(
+    start_date: datetime | None = None, num_days: int = 7
+) -> list:
     """
     Generates mock shifts for the scheduling period.
 

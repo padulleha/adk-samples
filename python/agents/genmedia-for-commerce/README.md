@@ -57,7 +57,7 @@ python -m venv .venv && source .venv/bin/activate  # On Windows: .venv\Scripts\a
 
 # Install the starter pack and create your project
 pip install --upgrade agent-starter-pack
-agent-starter-pack create genmedia_for_commerce -a adk@genmedia4commerce
+agent-starter-pack create genmedia4commerce -a adk@genmedia-for-commerce
 ```
 
 <details>
@@ -65,7 +65,7 @@ agent-starter-pack create genmedia_for_commerce -a adk@genmedia4commerce
 
 If you have [`uv`](https://github.com/astral-sh/uv) installed, you can create your project with a single command:
 ```bash
-uvx agent-starter-pack create genmedia_for_commerce -a adk@genmedia4commerce
+uvx agent-starter-pack create genmedia4commerce -a adk@genmedia-for-commerce
 ```
 This handles creating the project without needing to pre-install the package into a virtual environment.
 </details>

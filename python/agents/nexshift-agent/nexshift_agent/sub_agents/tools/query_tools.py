@@ -121,14 +121,16 @@ def list_nurses(filter_by: str = "") -> str:
             filtered = [
                 n
                 for n in nurses
-                if stats.get(n.id, {}).get("fatigue_score", 0) < FATIGUE_DISPLAY_MODERATE
+                if stats.get(n.id, {}).get("fatigue_score", 0)
+                < FATIGUE_DISPLAY_MODERATE
             ]
             filter_desc = "Available Nurses (Low Fatigue)"
         elif filter_lower in {"fatigued", "tired"}:
             filtered = [
                 n
                 for n in nurses
-                if stats.get(n.id, {}).get("fatigue_score", 0) >= FATIGUE_DISPLAY_MODERATE
+                if stats.get(n.id, {}).get("fatigue_score", 0)
+                >= FATIGUE_DISPLAY_MODERATE
             ]
             filter_desc = "Fatigued Nurses"
         elif filter_lower == "fulltime":
@@ -442,7 +444,8 @@ def get_staffing_summary() -> str:
         high_fatigue_names = [
             n.name
             for n in nurses
-            if stats.get(n.id, {}).get("fatigue_score", 0) >= FATIGUE_DISPLAY_HIGH
+            if stats.get(n.id, {}).get("fatigue_score", 0)
+            >= FATIGUE_DISPLAY_HIGH
         ]
         alerts.append(
             f"[HIGH] {by_fatigue['high']} nurse(s) at high fatigue: {', '.join(high_fatigue_names)}"

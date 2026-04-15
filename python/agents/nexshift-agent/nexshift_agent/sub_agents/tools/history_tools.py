@@ -90,11 +90,27 @@ def _calculate_fatigue_score(stats: dict) -> float:
     0.0 = Fresh, 1.0 = Burnout risk
     """
     consecutive_factor = (
-        min(stats.get("consecutive_shifts_current", 0) / FATIGUE_CONSECUTIVE_DIVISOR, 1.0) * FATIGUE_WEIGHT_CONSECUTIVE
+        min(
+            stats.get("consecutive_shifts_current", 0)
+            / FATIGUE_CONSECUTIVE_DIVISOR,
+            1.0,
+        )
+        * FATIGUE_WEIGHT_CONSECUTIVE
     )
-    weekend_factor = min(stats.get("weekend_shifts_30d", 0) / FATIGUE_WEEKLY_HOURS_DIVISOR, 1.0) * FATIGUE_WEIGHT_WEEKLY_HOURS
-    night_factor = min(stats.get("night_shifts_30d", 0) / FATIGUE_REST_HOURS_DIVISOR, 1.0) * FATIGUE_WEIGHT_REST_GAP
-    preference_factor = (1 - stats.get("preferences_honored_rate", 1.0)) * FATIGUE_WEIGHT_PATTERN
+    weekend_factor = (
+        min(
+            stats.get("weekend_shifts_30d", 0) / FATIGUE_WEEKLY_HOURS_DIVISOR,
+            1.0,
+        )
+        * FATIGUE_WEIGHT_WEEKLY_HOURS
+    )
+    night_factor = (
+        min(stats.get("night_shifts_30d", 0) / FATIGUE_REST_HOURS_DIVISOR, 1.0)
+        * FATIGUE_WEIGHT_REST_GAP
+    )
+    preference_factor = (
+        1 - stats.get("preferences_honored_rate", 1.0)
+    ) * FATIGUE_WEIGHT_PATTERN
 
     return round(
         consecutive_factor + weekend_factor + night_factor + preference_factor,
@@ -105,8 +121,6 @@ def _calculate_fatigue_score(stats: dict) -> float:
 # =============================================================================
 # Scheduling Period Tools
 # =============================================================================
-
-
 
 
 def get_scheduling_status() -> str:
@@ -810,7 +824,10 @@ def get_rosters_by_date_range(start_date: str, end_date: str) -> str:
             # Determine shift type
             try:
                 hour = int(start_time.split(":")[0])
-                if hour >= NIGHT_SHIFT_START_HOUR or hour < DAY_SHIFT_START_HOUR:
+                if (
+                    hour >= NIGHT_SHIFT_START_HOUR
+                    or hour < DAY_SHIFT_START_HOUR
+                ):
                     shift_type = "N"
                 elif hour >= EVENING_SHIFT_START_HOUR:
                     shift_type = "E"
@@ -962,7 +979,9 @@ def save_draft_roster(roster_json: str) -> str:
 
     # Remove existing draft with same ID
     history["logs"] = [
-        entry for entry in history["logs"] if entry.get("roster_id") != roster_id
+        entry
+        for entry in history["logs"]
+        if entry.get("roster_id") != roster_id
     ]
     history["logs"].append(history_entry)
     _save_json(SHIFT_HISTORY_FILE, history)
@@ -1161,7 +1180,9 @@ def finalize_roster(roster_id: str) -> str:
 
                 # Block if overlap includes past/today
                 if past_overlap_dates:
-                    past_dates_str = ", ".join(past_overlap_dates[:DISPLAY_OVERLAP_DATES])
+                    past_dates_str = ", ".join(
+                        past_overlap_dates[:DISPLAY_OVERLAP_DATES]
+                    )
                     if len(past_overlap_dates) > DISPLAY_OVERLAP_DATES:
                         past_dates_str += (
                             f" ... ({len(past_overlap_dates)} dates total)"

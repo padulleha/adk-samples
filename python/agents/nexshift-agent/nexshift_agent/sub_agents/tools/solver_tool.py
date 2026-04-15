@@ -112,7 +112,10 @@ def _convert_raw_shifts_to_objects(raw_shifts: list) -> list:
 
 def _is_night_shift(shift) -> bool:
     """Check if a shift is a night shift (starts at 20:00+ or before 06:00)."""
-    return shift.start_time.hour >= NIGHT_SHIFT_START_HOUR or shift.start_time.hour < DAY_SHIFT_START_HOUR
+    return (
+        shift.start_time.hour >= NIGHT_SHIFT_START_HOUR
+        or shift.start_time.hour < DAY_SHIFT_START_HOUR
+    )
 
 
 def _generate_roster_id() -> str:
@@ -175,7 +178,8 @@ def _auto_save_roster(
         history["logs"] = [
             entry
             for entry in history["logs"]
-            if entry.get("roster_id") != roster_id and entry.get("id") != roster_id
+            if entry.get("roster_id") != roster_id
+            and entry.get("id") != roster_id
         ]
         history["logs"].append(history_entry)
 
@@ -664,7 +668,8 @@ def _analyze_infeasibility(
                 len(shifts_per_day[d]) for d in sorted_dates
             ) / len(sorted_dates)
             if (
-                avg_shifts_per_day > len(nurses_objs) * SOLVER_UTILIZATION_THRESHOLD
+                avg_shifts_per_day
+                > len(nurses_objs) * SOLVER_UTILIZATION_THRESHOLD
             ):  # More than 75% utilization
                 constraint_issues.append(
                     {
@@ -686,7 +691,8 @@ def _analyze_infeasibility(
         for s in shifts_objs:
             # Night shifts end in the morning
             if (
-                s.start_time.hour == 0 or s.start_time.hour >= LATE_SHIFT_CONFLICT_HOUR
+                s.start_time.hour == 0
+                or s.start_time.hour >= LATE_SHIFT_CONFLICT_HOUR
             ):  # Evening/night shifts
                 end_date = s.end_time.date()
 
@@ -734,7 +740,9 @@ def _analyze_infeasibility(
             # Each qualified nurse can work ~5 shifts per week (with rest days)
             max_coverage = qualified_count * 5
 
-            if shifts_per_week > max_coverage * SOLVER_CAPACITY_THRESHOLD:  # Over 90% of max capacity
+            if (
+                shifts_per_week > max_coverage * SOLVER_CAPACITY_THRESHOLD
+            ):  # Over 90% of max capacity
                 constraint_issues.append(
                     {
                         "type": "WARD_OVERLOAD",
@@ -759,7 +767,8 @@ def _analyze_infeasibility(
         night_shifts = [
             s
             for s in shifts_objs
-            if s.start_time.hour >= NIGHT_SHIFT_START_HOUR or s.start_time.hour < DAY_SHIFT_START_HOUR
+            if s.start_time.hour >= NIGHT_SHIFT_START_HOUR
+            or s.start_time.hour < DAY_SHIFT_START_HOUR
         ]
 
         if night_shifts:
@@ -1438,7 +1447,11 @@ def _solve_roster_internal(
         objective_terms.append(WEIGHT_DEFICIT_SHIFTS_PENALTY * deficit)
 
     # Fairness: Distribute weekend shifts fairly
-    weekend_shifts = [s for s in shifts_objs if s.start_time.weekday() >= WEEKEND_WEEKDAY_START]
+    weekend_shifts = [
+        s
+        for s in shifts_objs
+        if s.start_time.weekday() >= WEEKEND_WEEKDAY_START
+    ]
     if weekend_shifts:
         fair_weekend_share = max(1, len(weekend_shifts) // len(nurses_objs))
         for n in nurses_objs:

@@ -198,7 +198,10 @@ class AgentEvaluator:
         )
 
         # Determine pass/fail
-        passed = tool_trajectory_score >= EVAL_TOOL_TRAJECTORY_DEFAULT and response_match_score >= 0.6  # noqa: PLR2004
+        passed = (
+            tool_trajectory_score >= EVAL_TOOL_TRAJECTORY_DEFAULT
+            and response_match_score >= EVAL_RESPONSE_MATCH_PASS_THRESHOLD
+        )
 
         return EvalResult(
             test_name=test_case.name,
@@ -305,6 +308,7 @@ def load_evalset(evalset_path: str) -> dict[str, Any]:
 # Default thresholds for eval metrics (overridden by evalset JSON config)
 EVAL_TOOL_TRAJECTORY_DEFAULT = 0.8
 EVAL_RESPONSE_MATCH_DEFAULT = 0.5
+EVAL_RESPONSE_MATCH_PASS_THRESHOLD = 0.6
 
 EVALS_DIR = Path(__file__).parent
 

@@ -61,7 +61,7 @@ dev = [
     "pytest-asyncio>=0.23.8,<1.0.0",
     "pytest-cov>=4.0.0",
     "nest-asyncio>=1.6.0,<2.0.0",
-    "agent-starter-pack>=0.14.1",
+    "agent-starter-pack>=0.41.0",
     "jupyter>=1.1.1",
     "ruff>=0.4.6",
     "codespell>=2.2.0",
@@ -104,7 +104,7 @@ skip = "uv.lock,.venv,src/frontend,**/*.ipynb,**/package-lock.json,**/node_modul
 [tool.agent-starter-pack]
 base_template = "adk_base"
 description = "A production-ready agent for generating high-quality retail media, including Virtual Try-On videos, 360° product spins, and product enrichment using Gemini and Veo"
-example_question = "Generate a virtual try-on video of this model wearing the red dress"
+example_question = "Generate a virtual try-on video of this model wearing this red dress"
 
 [tool.agent-starter-pack.settings]
 name = "genmedia-for-commerce"
@@ -112,4 +112,4 @@ description = "GenMedia retail media generation agent with MCP tools"
 base_template = "adk"
 agent_directory = "genmedia4commerce"
 deployment_targets = ["agent_engine", "cloud_run"]
-interactive_command = "dev"
+interactive_command = "setup-infra && make playground"

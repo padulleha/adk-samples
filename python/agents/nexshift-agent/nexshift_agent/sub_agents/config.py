@@ -29,7 +29,9 @@ MODEL_PRESENTER = os.environ.get("NEXSHIFT_MODEL_PRESENTER", "gemini-3.0-flash")
 NIGHT_SHIFT_START_HOUR = 20  # 20:00+ = night shift
 DAY_SHIFT_START_HOUR = 6  # 06:00-13:59 = day shift
 EVENING_SHIFT_START_HOUR = 14  # 14:00-19:59 = evening shift
-LATE_SHIFT_CONFLICT_HOUR = 16  # 16:00+ treated as evening/night for rest-gap analysis
+LATE_SHIFT_CONFLICT_HOUR = (
+    16  # 16:00+ treated as evening/night for rest-gap analysis
+)
 
 # =============================================================================
 # Weekend Detection

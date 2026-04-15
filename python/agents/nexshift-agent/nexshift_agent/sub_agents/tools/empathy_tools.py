@@ -474,7 +474,10 @@ def analyze_roster_fairness(roster_id: str = "") -> str:
     empathy_score = 1.0
 
     # Deduct for preference violations
-    pref_penalty = min(len(preference_violations) * EMPATHY_PREFERENCE_PENALTY, EMPATHY_PREFERENCE_PENALTY_CAP)
+    pref_penalty = min(
+        len(preference_violations) * EMPATHY_PREFERENCE_PENALTY,
+        EMPATHY_PREFERENCE_PENALTY_CAP,
+    )
     empathy_score -= pref_penalty
 
     # Deduct for shift imbalance
@@ -484,7 +487,10 @@ def analyze_roster_fairness(roster_id: str = "") -> str:
         empathy_score -= SHIFT_VARIANCE_MODERATE_DEDUCTION
 
     # Deduct for burnout risks
-    burnout_penalty = min(len(burnout_risks) * EMPATHY_BURNOUT_PENALTY, EMPATHY_BURNOUT_PENALTY_CAP)
+    burnout_penalty = min(
+        len(burnout_risks) * EMPATHY_BURNOUT_PENALTY,
+        EMPATHY_BURNOUT_PENALTY_CAP,
+    )
     empathy_score -= burnout_penalty
 
     empathy_score = max(0.0, round(empathy_score, 2))

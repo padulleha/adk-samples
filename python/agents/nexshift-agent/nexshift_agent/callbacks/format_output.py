@@ -2,7 +2,6 @@
 After-model callback to format coordinator output for chat display.
 """
 
-
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmResponse
 from google.genai import types
