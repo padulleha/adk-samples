@@ -1,6 +1,9 @@
 # Agent Academic Research
 /python/agents/academic-research/ @gulliantonio
 
+# Ambient Expense Agent
+/python/agents/ambient-expense-agent/ @eliasecchig
+
 # Auto Insurance Agent
 /python/agents/auto-insurance-agent/ @drush1980
 

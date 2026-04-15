@@ -2,6 +2,9 @@
 name = "ambient-expense-agent"
 version = "0.1.0"
 description = "An ambient agent that processes expense reports via Pub/Sub triggers, auto-approving expenses under $100 and flagging high-value ones for review using ADK 2.0 graph-based workflows."
+authors = [
+    {name = "Elia Secchi", email = "eliasecchi@google.com"},
+]
 license = {text = "Apache License 2.0"}
 requires-python = ">=3.11,<3.13"
 
