@@ -17,7 +17,7 @@
 name = "brand-aligned-presentations"
 authors = [
     {name = "Renee Zhang", email = "xiaolizhang@google.com"},
-    {name = "Nishant Nayak", email = "nishantnayak@google.com"}
+    {name = "Neil Desai", email = "nmdesai@google.com" }
 ]
 version = "0.1.0"
 description = "Generate a brand-adherent deck that integrates custom research."

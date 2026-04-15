@@ -13,10 +13,13 @@
 # limitations under the License.
 
 import argparse
+import datetime
+import json
 import logging
 import os
 import sys
 import tomllib
+from typing import Any
 
 import vertexai
 from dotenv import load_dotenv, set_key
@@ -40,17 +43,31 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 from presentation_agent.agent import root_agent
 
-
 # Function to update the .env file
 def update_env_file(agent_engine_id, env_file_path):
     """Updates the .env file with the agent engine ID."""
     try:
         set_key(env_file_path, "AGENT_ENGINE_ID", agent_engine_id)
-        print(
-            f"Updated AGENT_ENGINE_ID in {env_file_path} to {agent_engine_id}"
-        )
+        print(f"Updated AGENT_ENGINE_ID in {env_file_path} to {agent_engine_id}")
     except Exception as e:
         print(f"Error updating .env file: {e}")
+
+def write_deployment_metadata(
+    remote_agent: Any,
+    metadata_file: str = "deployment_metadata.json",
+) -> None:
+    """Write deployment metadata to file."""
+    metadata = {
+        "remote_agent_engine_id": remote_agent.resource_name,
+        "deployment_target": "agent_engine",
+        "is_a2a": False,
+        "deployment_timestamp": datetime.datetime.now().isoformat(),
+    }
+
+    with open(metadata_file, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    logging.info(f"Agent Engine ID written to {metadata_file}")
 
 def load_requirements():
     """Loads requirements from pyproject.toml."""
@@ -94,7 +111,6 @@ def setup_staging_bucket(project_id: str, location: str, bucket_name: str) -> st
         raise
 
     return f"gs://{bucket_name_without_prefix}"
-
 
 def handle_default_template(project_id, bucket_name):
     """Checks for DEFAULT_TEMPLATE_URI, uploads the default template if not set."""
@@ -176,8 +192,8 @@ def main(mode):
                 agent=root_agent,
                 enable_tracing=True,
             )
-            engine = agent_engines.get(AGENT_ENGINE_ID)
-            engine.update(
+            remote_agent = agent_engines.get(AGENT_ENGINE_ID)
+            remote_agent.update(
                 agent_engine=app,
                 display_name="presentation_agent",
                 requirements=load_requirements(),
@@ -186,6 +202,7 @@ def main(mode):
                 ],
                 env_vars=env_vars,
             )
+            write_deployment_metadata(remote_agent)
         else:
             logger.info("no exisiting agent engine app resource found in env")
 
@@ -197,7 +214,7 @@ def main(mode):
             enable_tracing=True,
         )
 
-        remote_app = agent_engines.create(
+        remote_agent = agent_engines.create(
             app,
             display_name="presentation_agent",
             requirements=load_requirements(),
@@ -208,9 +225,10 @@ def main(mode):
         )
 
         logging.info(
-            f"Deployed agent to Vertex AI Agent Engine successfully, resource name: {remote_app.resource_name}"
+            f"Deployed agent to Vertex AI Agent Engine successfully, resource name: {remote_agent.resource_name}"
         )
-        update_env_file(remote_app.resource_name, ENV_FILE_PATH)
+        update_env_file(remote_agent.resource_name, ENV_FILE_PATH)
+        write_deployment_metadata(remote_agent)
     else:
         logger.info("invalid mode")
 
