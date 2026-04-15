@@ -44,6 +44,11 @@ example_question = "Process the invoice for case_001."
 [tool.agent-starter-pack.settings]
 agent_directory = "invoice_processing"
 
+[[tool.uv.index]]
+name = "default"
+url = "https://pypi.org/simple"
+default = true
+
 [tool.ruff]
 # extends the ruff rules established in the root .toml
 extend = "../../../pyproject.toml"
