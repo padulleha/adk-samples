@@ -83,10 +83,10 @@ def create_data_store(
     print(f"Creating data store {data_store_id}...")
     response = requests.post(url, headers=headers, json=payload)
 
-    if response.status_code == 200:  # noqa: PLR2004
+    if response.status_code == 200:
         print(f"Data store {data_store_id} created successfully.")
         return True
-    elif response.status_code == 409:  # noqa: PLR2004
+    elif response.status_code == 409:
         print(f"Data store {data_store_id} already exists.")
         return True
     else:
@@ -155,10 +155,10 @@ def create_app(
     print(f"Creating app {app_id}...")
     response = requests.post(url, headers=headers, json=payload)
 
-    if response.status_code == 200:  # noqa: PLR2004
+    if response.status_code == 200:
         print(f"App {app_id} created successfully.")
         return True
-    elif response.status_code == 409:  # noqa: PLR2004
+    elif response.status_code == 409:
         print(f"App {app_id} already exists.")
         return True
     else:

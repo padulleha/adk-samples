@@ -100,7 +100,7 @@ def run_pipeline(
 # if __name__ == '__main__':
 #     # Example usage of the pipeline function
 #     gcs_uri = "gs://<bucket-name>/dags"
-#     src_ver = "1.10.12"
+#     src_ver = "1.10.10"
 #     tgt_ver = "2.10.5"
 #     project_id = "<project-id>"
 

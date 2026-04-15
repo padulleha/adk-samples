@@ -316,8 +316,8 @@ Here is a step-by-step example of a successful interactive migration session:
 
 **🧑 User:** 
 > ```text
-> source_airflow_version="1.10.5"
-> target_airflow_version="2.10"
+> source_airflow_version="1.10"
+> target_airflow_version="2.10.5"
 > source_gcs_uri="gs://<your-source-bucket-name>/dags/"
 > project_id="<project-id>"
 > ```

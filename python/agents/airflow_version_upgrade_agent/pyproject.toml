@@ -39,18 +39,9 @@ dev = [
 [tool.ruff]
 # Point back to the Master template in the root
 extend = "../../../pyproject.toml"
+exclude = ["Makefile"]
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle
-    "F",   # pyflakes
-    "W",   # pycodestyle warnings
-    "I",   # isort
-    "C",  # flake8-comprehensions
-    "B",   # flake8-bugbear
-    "UP", # pyupgrade
-    "RUF", # ruff specific rules
-]
 # Ignores function complication rule throughout sample
 ignore = ["C901", "PLR0915", "PLR2004"]
 
@@ -99,8 +90,6 @@ log_cli_format = "[%(asctime)s] %(levelname)s (%(funcName)s) \t [%(pathname)s:%(
 filterwarnings = [
     "ignore::UserWarning",
 ]
-pythonpath = "."
-asyncio_default_fixture_loop_scope = "function"
 
 [tool.agent-starter-pack]
 example_question = "Help me migrate airflow"
