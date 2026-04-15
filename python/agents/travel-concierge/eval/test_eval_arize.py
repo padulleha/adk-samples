@@ -34,6 +34,7 @@ from google.genai.types import Part, UserContent
 from phoenix.evals import GeminiModel, llm_classify
 
 # Import the travel concierge agent
+from travel_concierge import MODEL
 from travel_concierge.agent import root_agent
 
 load_dotenv()
@@ -56,7 +57,7 @@ arize_client = ArizeDatasetsClient(api_key=ARIZE_API_KEY)
 
 # Initialize Phoenix model for evaluations
 phoenix_model = GeminiModel(
-    model="gemini-2.5-flash",
+    model=MODEL,
     project=GOOGLE_CLOUD_PROJECT,
     location="us-central1",
 )

@@ -2,7 +2,7 @@
 
 This sample demonstrates the use of Agent Development Kit to deliver a new user experience for Travelers. A cohort of agents mimics the notion of having a personal travel concierge, taking care of a traveler's needs: from trip conception, planning and booking, to preparing for the trip, getting help to get from point A to B during the trip, while simultaneously acting as an informative guide.
 
-This example includes illustrations with ADK supported tools such as Google Places API, Google Search Grounding and MCP.
+This example includes illustrations with ADK supported tools such as Google Maps Grounding API, Google Search Grounding and MCP.
 
 The [Agent Starter Pack](https://goo.gle/agent-starter-pack) (ASP) is the **recommended** way to create a new project from this sample. The copy in [adk-samples](https://github.com/google/adk-samples) remains the upstream source for browsing and contributions.
 
@@ -69,9 +69,13 @@ Expand on the "Key Components" from above.
 
 - Python 3.11+
 - Google Cloud project (for Vertex AI)
-- API key for [Google Maps Platform Places API](https://developers.google.com/maps/documentation/places/web-service/get-api-key)
+- An [API key](https://developers.google.com/maps/get-started#api-key) with access to the [Maps Grounding Lite API](https://developers.google.com/maps/ai/grounding-lite)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - Google Agent Development Kit 1.0+
+
+To enable access Maps Grounding Lite API:
+- The API service "Maps Grounding Lite" must be enabled in the Google Cloud project.
+- Make sure "Maps Grounding Lite API" is added to the list of APIs the API key can access.
 
 ### Recommended: Using Agent Starter Pack
 
@@ -100,8 +104,8 @@ GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_PROJECT=__YOUR_CLOUD_PROJECT_ID__
 GOOGLE_CLOUD_LOCATION=us-central1
 
-# Places API
-GOOGLE_PLACES_API_KEY=__YOUR_API_KEY_HERE__
+# Maps API
+GOOGLE_MAPS_API_KEY=__YOUR_API_KEY_HERE__
 
 # GCS Storage Bucket name - for Agent Engine deployment test
 GOOGLE_CLOUD_STORAGE_BUCKET=YOUR_BUCKET_NAME_HERE
