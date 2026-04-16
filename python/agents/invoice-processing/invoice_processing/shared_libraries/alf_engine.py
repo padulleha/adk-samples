@@ -168,10 +168,35 @@ try:
 except ImportError:
     pass
 
-LLM_PROJECT_ID = os.getenv("PROJECT_ID")
-LLM_LOCATION = os.getenv("LOCATION", "us-central1")
-LLM_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
-LLM_CALL_DELAY = float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
+def _get_llm_project_id():
+    project = (
+        os.getenv("PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("GOOGLE_CLOUD_PROJECT_ID")
+        or os.getenv("GCP_PROJECT")
+    )
+    if not project:
+        try:
+            import google.auth  # noqa: PLC0415
+
+            _, project = google.auth.default()
+        except Exception:
+            pass
+    return project
+
+
+def _get_llm_location():
+    return os.getenv("LOCATION") or os.getenv(
+        "GOOGLE_CLOUD_REGION", "us-central1"
+    )
+
+
+def _get_llm_model():
+    return os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
+
+
+def _get_llm_call_delay():
+    return float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
 
 
 # ============================================================================
@@ -924,18 +949,18 @@ class LLMActionExecutor:
                     GenerativeModel,
                 )
 
-                if not LLM_PROJECT_ID:
+                if not _get_llm_project_id():
                     raise ValueError(
                         "PROJECT_ID not set. Export it or add to .env file."
                     )
-                aiplatform.init(project=LLM_PROJECT_ID, location=LLM_LOCATION)
+                aiplatform.init(project=_get_llm_project_id(), location=_get_llm_location())
                 cls._model = GenerativeModel(
-                    LLM_MODEL,
+                    _get_llm_model(),
                     generation_config=GenerationConfig(temperature=0),
                 )
                 logger.info(
-                    f"[LLM] Initialized {LLM_MODEL} "
-                    f"(project={LLM_PROJECT_ID}, location={LLM_LOCATION})"
+                    f"[LLM] Initialized {_get_llm_model()} "
+                    f"(project={_get_llm_project_id()}, location={_get_llm_location()})"
                 )
             except ImportError:
                 raise ImportError(
@@ -993,7 +1018,7 @@ class LLMActionExecutor:
 
         # Call Gemini Pro
         logger.info(
-            f"[LLM] Calling {LLM_MODEL} for {rule_id} (resume_from={resume_from})..."
+            f"[LLM] Calling {_get_llm_model()} for {rule_id} (resume_from={resume_from})..."
         )
         start_time = time.time()
 
@@ -1017,13 +1042,13 @@ class LLMActionExecutor:
                 f"(prompt={prompt_tokens}, completion={completion_tokens})"
             )
 
-            if LLM_CALL_DELAY > 0:
-                time.sleep(LLM_CALL_DELAY)
+            if _get_llm_call_delay() > 0:
+                time.sleep(_get_llm_call_delay())
 
             # Store LLM metadata in output for audit
             revised["_alf_llm_metadata"] = {
                 "rule_id": rule_id,
-                "model": LLM_MODEL,
+                "model": _get_llm_model(),
                 "latency_ms": round(latency_ms, 2),
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
@@ -1047,7 +1072,7 @@ class LLMActionExecutor:
             ).strip()
             output["_alf_llm_metadata"] = {
                 "rule_id": rule_id,
-                "model": LLM_MODEL,
+                "model": _get_llm_model(),
                 "error": str(e),
                 "resume_from": resume_from,
                 "fallback": "deterministic_set_aside",
@@ -1116,7 +1141,7 @@ class LLMActionExecutor:
 
         # Call Gemini Pro
         logger.info(
-            f"[LLM-PATCH] Calling {LLM_MODEL} for {rule_id} "
+            f"[LLM-PATCH] Calling {_get_llm_model()} for {rule_id} "
             f"(patching {len(target_fields)} fields)..."
         )
         start_time = time.time()
@@ -1141,8 +1166,8 @@ class LLMActionExecutor:
                 f"(prompt={prompt_tokens}, completion={completion_tokens})"
             )
 
-            if LLM_CALL_DELAY > 0:
-                time.sleep(LLM_CALL_DELAY)
+            if _get_llm_call_delay() > 0:
+                time.sleep(_get_llm_call_delay())
 
             # Apply patches to output (surgical: only target fields changed)
             patched_output = copy.deepcopy(output)
@@ -1164,7 +1189,7 @@ class LLMActionExecutor:
             patched_output["_alf_llm_metadata"] = {
                 "rule_id": rule_id,
                 "action_type": "llm_patch_fields",
-                "model": LLM_MODEL,
+                "model": _get_llm_model(),
                 "latency_ms": round(latency_ms, 2),
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
@@ -1189,7 +1214,7 @@ class LLMActionExecutor:
             output["_alf_llm_metadata"] = {
                 "rule_id": rule_id,
                 "action_type": "llm_patch_fields",
-                "model": LLM_MODEL,
+                "model": _get_llm_model(),
                 "error": str(e),
                 "target_fields": target_fields,
                 "fallback": "deterministic_set_aside",

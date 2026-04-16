@@ -16,11 +16,11 @@ from datetime import date
 
 from .case_loader import CaseData
 from .config import (
-    LLM_CALL_DELAY,
-    LLM_LOCATION,
-    LLM_MODEL,
-    LLM_PROJECT_ID,
     RULES_BOOK_PATH,
+    get_llm_call_delay,
+    get_llm_location,
+    get_llm_model,
+    get_llm_project_id,
 )
 from .prompts import (
     RULE_DISCOVERY_SYSTEM_PROMPT,
@@ -68,13 +68,14 @@ class _LLMClient:
                 GenerativeModel,
             )
 
-            if not LLM_PROJECT_ID:
+            project_id = get_llm_project_id()
+            if not project_id:
                 raise ValueError(
                     "PROJECT_ID not set. Export it or add to .env file."
                 )
-            aiplatform.init(project=LLM_PROJECT_ID, location=LLM_LOCATION)
-            cls._model = GenerativeModel(LLM_MODEL)
-            logger.info(f"Initialized {LLM_MODEL} (project={LLM_PROJECT_ID})")
+            aiplatform.init(project=project_id, location=get_llm_location())
+            cls._model = GenerativeModel(get_llm_model())
+            logger.info(f"Initialized {get_llm_model()} (project={project_id})")
         return cls._model
 
     @classmethod
@@ -84,8 +85,9 @@ class _LLMClient:
         start = time.time()
         response = model.generate_content(prompt)
         latency_ms = (time.time() - start) * 1000
-        if LLM_CALL_DELAY > 0:
-            time.sleep(LLM_CALL_DELAY)
+        call_delay = get_llm_call_delay()
+        if call_delay > 0:
+            time.sleep(call_delay)
         return response.text.strip(), latency_ms
 
 
@@ -232,7 +234,7 @@ class RuleDiscovererAgent:
         Returns:
             ProposedRule with the proposed rule dict.
         """
-        result = ProposedRule(llm_model=LLM_MODEL)
+        result = ProposedRule(llm_model=get_llm_model())
 
         # Gather context
         failing_phase, failing_step, rejection_reason = self._get_failing_info(
@@ -351,7 +353,7 @@ class RuleDiscovererAgent:
         Returns:
             ProposedRule with revised rule dict.
         """
-        result = ProposedRule(llm_model=LLM_MODEL)
+        result = ProposedRule(llm_model=get_llm_model())
 
         invoice = case_data.context.get("invoice", {})
         extraction = case_data.artifacts.get("extraction", {})

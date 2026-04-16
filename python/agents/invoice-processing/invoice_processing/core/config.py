@@ -54,10 +54,43 @@ except ImportError:
 # LLM configuration (mirrors acting_agent / alf_engine.py)
 # ---------------------------------------------------------------------------
 
-LLM_PROJECT_ID = os.getenv("PROJECT_ID")
-LLM_LOCATION = os.getenv("LOCATION", "us-central1")
-LLM_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
-LLM_CALL_DELAY = float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
+def get_llm_project_id():
+    """Return PROJECT_ID from env (deferred for Agent Engine compatibility).
+
+    Checks multiple env var names to match the inference path pattern
+    and falls back to google.auth.default() for Agent Engine containers.
+    """
+    project = (
+        os.getenv("PROJECT_ID")
+        or os.getenv("GOOGLE_CLOUD_PROJECT")
+        or os.getenv("GOOGLE_CLOUD_PROJECT_ID")
+        or os.getenv("GCP_PROJECT")
+    )
+    if not project:
+        try:
+            import google.auth  # noqa: PLC0415
+
+            _, project = google.auth.default()
+        except Exception:
+            pass
+    return project
+
+
+def get_llm_location():
+    """Return LOCATION from env (deferred for Agent Engine compatibility)."""
+    return os.getenv("LOCATION") or os.getenv(
+        "GOOGLE_CLOUD_REGION", "us-central1"
+    )
+
+
+def get_llm_model():
+    """Return GEMINI_PRO_MODEL from env (deferred for Agent Engine compatibility)."""
+    return os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro")
+
+
+def get_llm_call_delay():
+    """Return API_CALL_DELAY_SECONDS from env (deferred for Agent Engine compatibility)."""
+    return float(os.getenv("API_CALL_DELAY_SECONDS", "1.0"))
 
 # ---------------------------------------------------------------------------
 # Master data loader (optional — provides domain-agnostic configuration)
