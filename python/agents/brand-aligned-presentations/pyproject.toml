@@ -48,7 +48,7 @@ deployment = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.2",
+    "pytest>=9.0.3",
     "pytest-asyncio>=1.2.0",
     "black>=24.0.0",
     "ruff>=0.3.0",
