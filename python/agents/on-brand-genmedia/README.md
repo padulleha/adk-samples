@@ -81,6 +81,7 @@ The Guidelines Driven Media Gen Agent implements a sequential workflow using spe
     *   Authenticate your GCloud account.
 
         ```bash
+        gcloud auth login
         gcloud auth application-default login
         gcloud auth application-default set-quota-project $GOOGLE_CLOUD_PROJECT
         ```
