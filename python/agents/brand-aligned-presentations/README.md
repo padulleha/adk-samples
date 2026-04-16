@@ -222,7 +222,7 @@ Once deployed, register the agent so it can be discovered as a Tool/Agent in Gem
 
 ---
 ## 9. Example
-**User Prompt:** "Create a 10-slide presentation for analyzing investment opportunities in the biotech industry. Use the default template. Don’t generate the presentation until I ask, I need to check the presentation outline first."
+**User Prompt:** "Create a 10-slide presentation for analyzing investment opportunities in the biotech industry in USA. Use the default template. Don’t generate the presentation until I ask, I need to check the presentation outline first."
 
 **Agent Output:**
 Inspect the template and plan the deck outline.

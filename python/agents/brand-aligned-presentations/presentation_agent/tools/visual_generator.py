@@ -21,8 +21,8 @@ from google.genai import types
 
 from ..shared_libraries.config import (
     GCS_BUCKET_NAME,
-    LOCATION,
-    PROJECT_ID,
+    GOOGLE_CLOUD_LOCATION,
+    GOOGLE_CLOUD_PROJECT,
     _genai_client,
     get_gcs_client,
     get_logger,
@@ -58,7 +58,7 @@ async def generate_visual(prompt: str) -> str:
                 "Global genai client was None. Re-initializing for Vertex AI."
             )
             _genai_client = genai.Client(
-                vertexai=True, project=PROJECT_ID, location=LOCATION
+                vertexai=True, project=GOOGLE_CLOUD_PROJECT, location=GOOGLE_CLOUD_LOCATION
             )
 
         model_name = "gemini-2.5-flash-image"
