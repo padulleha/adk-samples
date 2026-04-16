@@ -57,11 +57,7 @@ ignore = ["C901", "PLR0915"]
 known-first-party = ["app", "bidi_demo"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
-
-[tool.hatch.build.targets.wheel.shared-data]
-"app/static" = "share/bidi-demo/static"
-"app/.env" = "share/bidi-demo/.env.template"
+packages = ["sdlc_user_story_refiner"]
 
 [build-system]
 requires = ["hatchling"]
@@ -73,3 +69,7 @@ example_question = "I want to build a Slack integration for our notification sys
 
 [tool.agent-starter-pack.settings]
 agent_directory = "sdlc_user_story_refiner"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
