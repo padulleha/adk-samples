@@ -27,6 +27,7 @@ export interface FittingValidation {
 
 export interface FittingSideResult {
   imageUrl: string
+  imageBase64: string
   status: 'ready' | 'discarded'
   validation: FittingValidation
   totalAttempts: number
@@ -35,6 +36,7 @@ export interface FittingSideResult {
 export interface FittingPipelineResult {
   front: FittingSideResult | null
   back: FittingSideResult | null
+  framing?: string
 }
 
 /**
@@ -73,6 +75,7 @@ export async function generateFitting(
     if (!side) return null
     return {
       imageUrl: base64ToImageUrl(side.image_base64),
+      imageBase64: side.image_base64,
       status: side.status,
       validation: side.validation,
       totalAttempts: side.total_attempts,
@@ -82,5 +85,48 @@ export async function generateFitting(
   return {
     front: parseSide(data.front),
     back: parseSide(data.back),
+    framing: data.framing,
   }
+}
+
+export interface GenerateVideoRequest {
+  frontImage: string // data URL
+  backImage?: string // data URL
+  framing?: string
+  prompt?: string
+}
+
+export interface VideoResult {
+  videos: string[] // base64 strings
+  scores?: number[]
+  filenames?: string[]
+}
+
+/**
+ * Generates product fitting video.
+ */
+export async function generateVideo(
+  request: GenerateVideoRequest
+): Promise<VideoResult> {
+  const payload: Record<string, unknown> = {
+    front_image_base64: dataUrlToBase64(request.frontImage),
+    framing: request.framing ?? 'full_body',
+    prompt: request.prompt ?? '',
+  }
+  if (request.backImage) {
+    payload.back_image_base64 = dataUrlToBase64(request.backImage)
+  }
+
+  const response = await fetch(`${API_BASE_URL}/generate-video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(errorData.detail || `Request failed with status ${response.status}`)
+  }
+
+  return await response.json()
 }

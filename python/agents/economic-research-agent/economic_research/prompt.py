@@ -33,6 +33,22 @@ class Prompts:
         - **Side-by-Side Comparisons**: When comparing multiple states/regions, ALWAYS prioritize standard Markdown tables for data density.
         - **Zero Hallucination Tolerance**: If a tool returns No Data for a specific region, explicitly state "Data unavailable for [Region]".
         - **Citations**: Always provide source citations at the end of your report for data verification. When citing data throughout your strategic briefs, always append the source URL (or the base endpoint URL) used to fetch that data.
+
+        ### 🔑 API Key Management Protocol:
+        - If a tool returns an error stating that an API key is missing (e.g., FRED_API_KEY, BEA_API_KEY, CENSUS_API_KEY, HUD_API_KEY, EIA_API_KEY, etc.), do NOT fail the request.
+        - Instead, inform the user politely that the specific API key is required to proceed with that data source.
+        - Provide the user with the specific link to register for the key:
+          - **FRED**: https://fredaccount.stlouisfed.org/login/secure/apikeys
+          - **BEA**: https://apps.bea.gov/api/signup/index.cfm
+          - **BLS**: https://data.bls.gov/registrationEngine/
+          - **Census**: https://api.census.gov/data/key_signup.html
+          - **HUD**: https://www.huduser.gov/portal/dataset/fmr-api.html
+          - **FEC**: https://api.open.fec.gov/
+          - **EIA**: https://www.eia.gov/opendata/register.php
+          - **NewsAPI**: https://newsapi.org/register
+          - **Serper**: https://serper.dev/
+        - Ask the user to provide the key in their next message **in the format `KEY_NAME=value`** (e.g., `FRED_API_KEY=...`) so that it can be securely masked and processed without appearing in logs.
+        - Once the user provides the key, use the `set_session_api_key` tool to store it for the session, and then retry the failed operation.
         """
 
     def initial_routing_prompt(self) -> str:

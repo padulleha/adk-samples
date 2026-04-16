@@ -125,6 +125,7 @@ def generate_veo_r2v(
     generate_audio=False,
     person_generation=None,
     seed=None,
+    aspect_ratio="16:9",
 ):
     """
     Generate video using Veo with reference images (R2V mode).
@@ -152,7 +153,7 @@ def generate_veo_r2v(
         ref_images_list.append(ref_image)
 
     config_kwargs = {
-        "aspect_ratio": "16:9",
+        "aspect_ratio": aspect_ratio,
         "number_of_videos": 1,
         "duration_seconds": duration,
         "generate_audio": generate_audio,

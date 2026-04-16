@@ -51,6 +51,7 @@ backend: deploy
 # Usage: make deploy-agent-engine [AGENT_IDENTITY=true] [SECRETS="KEY=SECRET_ID,..."]
 deploy-agent-engine:
 	@if [ ! -f config.env ]; then echo "Error: config.env not found"; exit 1; fi
+	cp config.env genmedia4commerce/config.env
 	source config.env && gcloud config set project $$PROJECT_ID --quiet && \
 	(uv export --no-hashes --no-header --no-dev --no-emit-project --no-annotate > genmedia4commerce/app_utils/.requirements.txt 2>/dev/null || \
 	uv export --no-hashes --no-header --no-dev --no-emit-project > genmedia4commerce/app_utils/.requirements.txt) && \
@@ -77,6 +78,7 @@ deploy-agent-engine:
 # Usage: make deploy-cloudrun
 deploy-cloudrun:
 	@if [ ! -f config.env ]; then echo "Error: config.env not found"; exit 1; fi
+	cp config.env genmedia4commerce/config.env
 	@source config.env && gcloud config set project $$PROJECT_ID --quiet && \
 	gcloud run deploy $$SERVICE_NAME \
 		--source=. \
@@ -209,7 +211,7 @@ setup-infra: pull-assets
 	@if [ ! -f config.env ]; then echo "Error: config.env not found"; exit 1; fi
 	@source config.env && \
 		gcloud config set project $$PROJECT_ID --quiet && \
-		gcloud auth application-default set-quota-project $$PROJECT_ID
+		gcloud services enable cloudresourcemanager.googleapis.com --quiet
 	@$(TF_VARS) && cd infra/terraform && terraform init && terraform apply
 
 # Preview infrastructure changes

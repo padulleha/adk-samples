@@ -58,11 +58,7 @@ ignore = ["C901", "PLR0915"]
 known-first-party = ["app", "bidi_demo"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
-
-[tool.hatch.build.targets.wheel.shared-data]
-"app/static" = "share/bidi-demo/static"
-"app/.env" = "share/bidi-demo/.env.template"
+packages = ["sdlc_technical_designer"]
 
 [build-system]
 requires = ["hatchling"]
@@ -74,3 +70,7 @@ example_question = "Here is the refined user story for the Slack notification in
 
 [tool.agent-starter-pack.settings]
 agent_directory = "sdlc_technical_designer"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true

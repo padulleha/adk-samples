@@ -34,7 +34,7 @@ DEBUG_FOLDER = Path(__file__).parent / "debug"
 
 # Global flag to enable/disable debug saving
 # Set DEBUG_IMAGES=1 environment variable to enable
-DEBUG_ENABLED = os.getenv("DEBUG_IMAGES", "0") == "1"
+DEBUG_ENABLED = False
 
 if DEBUG_ENABLED:
     logger.info("[Debug] Debug image saving is ENABLED (DEBUG_IMAGES=1)")
@@ -59,6 +59,12 @@ def _get_session_folder():
         _session_folder = get_debug_session_folder()
         logger.info(f"[Debug] Saving images to: {_session_folder}")
     return _session_folder
+
+
+def get_current_session_key():
+    """Get the name of the current debug session folder."""
+    folder = _get_session_folder()
+    return folder.name
 
 
 def save_debug_image(img_bytes, step_name, prefix=""):

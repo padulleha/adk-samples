@@ -21,6 +21,7 @@ import os
 from google import genai
 
 from workflows.product_enrichment.product_fitting.pipeline import run_fitting_pipeline
+from workflows.product_enrichment.product_fitting.video_pipeline import run_animate_product_fitting
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,7 @@ async def run_product_fitting(
     response = {
         "front": _format_side(result.get("front")),
         "back": _format_side(result.get("back")),
+        "framing": result.get("framing", "full_body"),
     }
     if result.get("front_skipped_reason"):
         response["front_skipped_reason"] = result["front_skipped_reason"]
@@ -201,3 +203,62 @@ async def run_product_fitting(
 
     logger.info("[MCP product_fitting] Complete")
     return response
+
+
+async def run_product_fitting_animation(
+    front_image_base64: str,
+    back_image_base64: str | None = None,
+    framing: str = "full_body",
+    number_of_videos: int = 1,
+    prompt: str = "",
+) -> dict:
+    """Generate product fitting video.
+    
+    Args:
+        front_image_base64: Base64 encoded front image.
+        back_image_base64: Optional base64 encoded back image.
+        framing: Framing of the input image.
+        number_of_videos: Number of videos to generate.
+        prompt: Optional custom animation prompt.
+        garment_images_base64: Optional list of base64-encoded original garment images.
+        
+    Returns:
+        Dictionary with videos (base64), scores, and filenames.
+    """
+    try:
+        front_bytes = base64.b64decode(front_image_base64)
+        back_bytes = base64.b64decode(back_image_base64) if back_image_base64 else None
+        
+    except Exception as e:
+        raise ValueError(f"Invalid encoding: {e}")
+
+    logger.info(
+        f"[MCP product_fitting] Starting animation: framing={framing}, "
+        f"has_back={back_image_base64 is not None}"
+    )
+
+    final_event = None
+    async for event in run_animate_product_fitting(
+        front_image=front_bytes,
+        back_image=back_bytes,
+        framing=framing,
+        number_of_videos=number_of_videos,
+        prompt=prompt,
+    ):
+        if event["status"] in ("videos", "error"):
+            final_event = event
+            break
+
+    if final_event and final_event["status"] == "videos":
+        logger.info("[MCP product_fitting] Animation complete")
+        return {
+            "videos": final_event["videos"],
+            "scores": final_event["scores"],
+            "filenames": final_event["filenames"],
+        }
+    elif final_event and final_event["status"] == "error":
+        logger.warning(f"[MCP product_fitting] Animation failed: {final_event['detail']}")
+        return {"error": final_event["detail"]}
+    else:
+        logger.warning("[MCP product_fitting] Animation yielded no result")
+        return {"error": "No videos generated"}

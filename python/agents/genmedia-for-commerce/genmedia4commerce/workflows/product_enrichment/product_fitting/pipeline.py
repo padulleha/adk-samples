@@ -22,7 +22,11 @@ import base64
 import json
 import logging
 
+from datetime import datetime
+from typing import Optional, Any
 from fastapi.concurrency import run_in_threadpool
+from workflows.shared.debug_utils import save_debug_image, get_current_session_key
+from workflows.shared.image_utils import preprocess_images
 
 from workflows.shared.nano_banana import NANO_TIMEOUT_SECONDS
 
@@ -218,6 +222,7 @@ async def _generate_view(
     gen_kwargs: dict | None = None,
     product_id: str | None = None,
     category: str = "",
+    session_key: Optional[str] = None,
 ):
     """Generate images sequentially with fix attempts, up to max_retries.
 
@@ -350,6 +355,9 @@ async def _generate_view(
                 f"[Fitting] {view_name} attempt {attempt + 1} generation error: {e}"
             )
             fitting_image = None
+
+        if fitting_image:
+            save_debug_image(fitting_image, f"attempt_{attempt + 1}", prefix=f"{view_name}_{session_key}")
 
         if fitting_image is None:
             request_logger.info(
@@ -624,8 +632,20 @@ async def run_fitting_pipeline(
     )
     all_sse_events: list[str] = []
 
+    session_key = get_current_session_key()
+    request_logger.info(f"[Fitting][Key:{session_key}] Preprocessing garment images (extract + upscale)")
+    garment_images_bytes = await run_in_threadpool(
+        preprocess_images,
+        garment_images_bytes,
+        client=genai_client,
+        upscale_client=genai_client,
+        upscale_images=True,
+        create_canva=False,
+        skip_crop=True,
+    )
+
     # Step 1: Classify garments (single call for all images of the same garment)
-    request_logger.debug("[Fitting] Step 1: Classifying garments")
+    request_logger.info(f"[Fitting][Key:{session_key}] Step 1: Classifying garments")
     classification = await run_in_threadpool(
         classify_garments,
         genai_client,
@@ -857,6 +877,7 @@ async def run_fitting_pipeline(
         scenario=scenario,
         framing=framing,
         generation_model=generation_model,
+        session_key=session_key,
         garment_description=garment_description,
         gender=gender,
         front_view_details=front_view_details,

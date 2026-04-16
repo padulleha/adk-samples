@@ -106,7 +106,7 @@ def generate_fitting(
         system_instruction=system_prompt,
         image_config={
             "aspect_ratio": aspect_ratio,
-            "image_size": "1K",
+            "image_size": "2K",
             "output_mime_type": "image/png",
         },
     )

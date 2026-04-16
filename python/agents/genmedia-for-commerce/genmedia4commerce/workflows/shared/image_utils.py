@@ -289,7 +289,9 @@ def upscale_image_bytes(client, image_bytes, upscale_factor="x4"):
     logger.debug(f"Upscaling with factor: {upscale_factor}")
 
     # Debug: save before upscaling
-    save_debug_image(image_bytes, "upscale_input", prefix="upscale")
+    import hashlib
+    img_hash = hashlib.md5(image_bytes).hexdigest()[:6]
+    save_debug_image(image_bytes, f"upscale_input_{img_hash}", prefix="upscale")
 
     input_image = types.Image(image_bytes=image_bytes)
 
@@ -306,7 +308,7 @@ def upscale_image_bytes(client, image_bytes, upscale_factor="x4"):
     upscaled_bytes = response.generated_images[0].image.image_bytes
 
     # Debug: save after upscaling
-    save_debug_image(upscaled_bytes, "upscale_output", prefix="upscale")
+    save_debug_image(upscaled_bytes, f"upscale_output_{img_hash}", prefix="upscale")
 
     return upscaled_bytes
 
@@ -933,7 +935,7 @@ def stack_and_canvas_images(
 
 
 def extract_upscale_product(
-    client, upscale_client, img_bytes, clean_after_upscale=True
+    client, upscale_client, img_bytes, clean_after_upscale=True, skip_crop=False
 ):
     """
     Extract product from background and upscale it.
@@ -953,6 +955,10 @@ def extract_upscale_product(
                Returns original image if processing fails.
     """
     try:
+        if skip_crop:
+            # Just upscale directly without background removal or cropping
+            return upscale_image_bytes(upscale_client, img_bytes)
+
         if clean_after_upscale:
             # Extract product and keep mask for reuse
             extracted_bytes, mask = replace_background_with_mask_return(
@@ -981,6 +987,7 @@ def preprocess_images(
     num_workers=16,
     upscale_images=True,
     create_canva=True,
+    skip_crop=False,
 ):
     """
     Preprocess images with optional upscaling and canvas creation.
@@ -994,15 +1001,23 @@ def preprocess_images(
         num_workers: Number of parallel workers (default: 16)
         upscale_images: If True, extract and upscale products (default: True)
         create_canva: If True, create canvas with consistent sizing (default: True)
+        skip_crop: If True, skips background removal and cropping (default: False)
 
     Returns:
         List of preprocessed image bytes
     """
-    if upscale_images:
+    if upscale_images and skip_crop:
+        images_bytes_list = predict_parallel(
+            images_bytes_list,
+            lambda img_bytes: upscale_image_bytes(upscale_client, img_bytes),
+            max_workers=num_workers,
+            show_progress_bar=False,
+        )
+    elif upscale_images:
         images_bytes_list = predict_parallel(
             images_bytes_list,
             lambda img_bytes: extract_upscale_product(
-                client, upscale_client, img_bytes
+                client, upscale_client, img_bytes, skip_crop=False
             ),
             max_workers=num_workers,
             show_progress_bar=False,

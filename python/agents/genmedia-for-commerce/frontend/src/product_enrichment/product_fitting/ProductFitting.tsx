@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ProductFittingForm from './ProductFittingForm'
 import ProductFittingPreview from './ProductFittingPreview'
-import { generateFitting, FittingPipelineResult } from './productFittingApi'
+import { generateFitting, FittingPipelineResult, generateVideo, VideoResult } from './productFittingApi'
 import type { ModelPreset } from '../../shared/modelGallery'
 
 interface ProductFittingProps {
@@ -43,6 +43,10 @@ function ProductFitting({ showVideo = true }: ProductFittingProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [result, setResult] = useState<FittingPipelineResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const [isVideoLoading, setIsVideoLoading] = useState(false)
+  const [videoResult, setVideoResult] = useState<VideoResult | null>(null)
+  const [videoError, setVideoError] = useState<string | null>(null)
 
   const handleFileUpload = (files: File[]) => {
     const newImages: string[] = []
@@ -116,6 +120,9 @@ function ProductFitting({ showVideo = true }: ProductFittingProps) {
     setIsLoading(true)
     setError(null)
     setResult(null)
+    setIsVideoLoading(false)
+    setVideoResult(null)
+    setVideoError(null)
 
     try {
       const garmentDataUrls = await Promise.all(
@@ -142,6 +149,35 @@ function ProductFitting({ showVideo = true }: ProductFittingProps) {
     }
   }
 
+  const handleGenerateVideo = async () => {
+    if (!result || (!result.front && !result.back)) return
+    
+    setIsVideoLoading(true)
+    setVideoError(null)
+    
+    try {
+      const frontImage = result.front?.imageBase64
+      const backImage = result.back?.imageBase64
+      
+      if (!frontImage) {
+         setVideoError('No front image available for animation')
+         return
+      }
+      
+      const videoRes = await generateVideo({
+        frontImage,
+        backImage,
+        framing: result.framing ?? 'full_body',
+      })
+      
+      setVideoResult(videoRes)
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'Failed to generate video')
+    } finally {
+      setIsVideoLoading(false)
+    }
+  }
+
   return (
     <div className="grid grid-cols-[480px_1fr] gap-6">
       <ProductFittingForm
@@ -158,10 +194,15 @@ function ProductFitting({ showVideo = true }: ProductFittingProps) {
         isLoading={isLoading}
       />
       <ProductFittingPreview
+        key={result?.front?.imageUrl || 'empty'}
         showVideo={showVideo}
         isLoading={isLoading}
         error={error}
         result={result}
+        onAnimate={handleGenerateVideo}
+        isVideoLoading={isVideoLoading}
+        videoResult={videoResult}
+        videoError={videoError}
       />
     </div>
   )
