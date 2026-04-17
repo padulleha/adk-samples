@@ -107,5 +107,5 @@ help:
 	@echo "  For Vertex AI:"
 	@echo "    echo 'GOOGLE_GENAI_USE_VERTEXAI=TRUE' >> app/.env"
 	@echo "    echo 'GOOGLE_CLOUD_PROJECT=your_project' >> app/.env"
-	@echo "    echo 'GOOGLE_CLOUD_LOCATION=us-central1' >> app/.env"
+	@echo "    echo 'GOOGLE_CLOUD_LOCATION=us-east1' >> app/.env"
 	@echo "    echo 'MAPS_API_KEY=your_maps_key' >> app/.env"

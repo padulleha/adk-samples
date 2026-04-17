@@ -67,7 +67,7 @@ A comprehensive data engineering agent.
 
 ```
     GOOGLE_CLOUD_PROJECT=your-project-id
-    GOOGLE_CLOUD_LOCATION=us-central1
+    GOOGLE_CLOUD_LOCATION=us-east1
 
     # Used for Vertex AI, Dataform, and BigQuery GOOGLE_GENAI_USE_VERTEXAI=1
     # Model Configuration
@@ -86,7 +86,7 @@ A comprehensive data engineering agent.
 -   `GOOGLE_CLOUD_PROJECT`: Your Google Cloud Project ID (preferred) or use
     `GCP_PROJECT_ID`
 -   `GOOGLE_CLOUD_LOCATION`: Location for Vertex AI, Dataform, and BigQuery
-    (default: us-central1)
+    (default: us-east1)
 -   `GOOGLE_GENAI_USE_VERTEXAI`: Set to 1 to use Vertex AI (default: 0)
 -   `ROOT_AGENT_MODEL`: Model to use for the root agent (default:
     gemini-2.5-pro)

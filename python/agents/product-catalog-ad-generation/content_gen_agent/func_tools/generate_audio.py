@@ -39,7 +39,7 @@ STATIC_AUDIO_FALLBACK = "static/audio/audio_track_1.mp3"
 TTS_MODEL_NAME = "gemini-2.5-flash-preview-tts"
 TTS_VOICE_NAME = "Schedar"
 LYRIA_MODEL_ID = "lyria-002"
-LYRIA_LOCATION = "us-central1"
+LYRIA_LOCATION = "us-east1"
 
 
 async def generate_audio(

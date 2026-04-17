@@ -131,7 +131,7 @@ If you've already cloned the repository (as in Option A) and want to use Vertex 
 ```bash
 echo "GOOGLE_GENAI_USE_VERTEXAI=TRUE" >> app/.env
 echo "GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID" >> app/.env
-echo "GOOGLE_CLOUD_LOCATION=us-central1" >> app/.env
+echo "GOOGLE_CLOUD_LOCATION=us-east1" >> app/.env
 echo "MAPS_API_KEY=YOUR_MAPS_API_KEY" >> app/.env
 ```
 

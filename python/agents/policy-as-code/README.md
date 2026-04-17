@@ -48,7 +48,7 @@ The agent requires a few environment variables to function.
 
 2.  Open `.env` and fill in your details:
     *   `GOOGLE_CLOUD_PROJECT`: Your Google Cloud Project ID.
-    *   `GOOGLE_CLOUD_LOCATION`: (e.g., `us-central1`).
+    *   `GOOGLE_CLOUD_LOCATION`: (e.g., `us-east1`).
     *   `ENABLE_MEMORY_BANK`: Set to `True` to enable long-term memory (requires Firestore). Set to `False` to run without it. See [Memory Integration](./docs/MEMORY_INTEGRATION.md) for details.
     *   `FIRESTORE_DATABASE`: (Optional) Leave as `(default)` unless using a named database.
 

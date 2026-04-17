@@ -40,7 +40,7 @@ def list_dataflow_jobs(
         project_id (str): The Google Cloud project ID where the Dataflow jobs
             are running.
         location (Optional[str], optional): The region to filter jobs by
-            (e.g. 'us-central1'). If not specified or None, jobs from all
+            (e.g. 'us-east1'). If not specified or None, jobs from all
             regions are included.
         status (Optional[str], optional): Filter jobs by their current status.
             Allowed values are 'UNKNOWN', 'ALL', 'TERMINATED', 'ACTIVE'. If not
@@ -126,7 +126,7 @@ def get_dataflow_job_details(
             Dataflow job.
         job_id (str): The unique identifier of the Dataflow job.
         location (str): The regional location where the job is running
-            (e.g., 'us-central1').
+            (e.g., 'us-east1').
 
     Returns:
         dict: A dictionary containing either the job details and metrics report
@@ -215,7 +215,7 @@ def cancel_dataflow_job(
             Dataflow job.
         job_id (str): The unique identifier of the Dataflow job to be cancelled.
         location (str): The regional location where the job is running
-            (e.g., 'us-central1').
+            (e.g., 'us-east1').
 
     Returns:
         dict: A dictionary indicating success or failure of the cancellation

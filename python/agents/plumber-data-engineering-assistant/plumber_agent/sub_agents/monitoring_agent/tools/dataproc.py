@@ -229,7 +229,7 @@ def get_dataproc_normal_job_logs_with_id(
 
     Args:
         project_id (str, required): The Google Cloud project ID.
-        region (str, required): The GCP region where the Dataproc job resides (e.g., 'us-central1').
+        region (str, required): The GCP region where the Dataproc job resides (e.g., 'us-east1').
         job_id (str, required): The unique ID of the Dataproc job (e.g., 'pyspark_job-xyz').
         filter_key (str, required): The `gcloud dataproc` subcommand part ('jobs' or 'batches').
 

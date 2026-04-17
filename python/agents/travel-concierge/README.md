@@ -129,7 +129,7 @@ Expand on the "Key Components" from above.
 
     # Vertex backend config
     GOOGLE_CLOUD_PROJECT=__YOUR_CLOUD_PROJECT_ID__
-    GOOGLE_CLOUD_LOCATION=us-central1
+    GOOGLE_CLOUD_LOCATION=us-east1
 
     # Places API
     GOOGLE_PLACES_API_KEY=__YOUR_API_KEY_HERE__
@@ -253,7 +253,7 @@ uv run python deployment/deploy.py --create
 When this command returns, if it succeeds it will print an AgentEngine resource
 id that looks something like this:
 ```
-projects/************/locations/us-central1/reasoningEngines/7737333693403889664
+projects/************/locations/us-east1/reasoningEngines/7737333693403889664
 ```
 
 To quickly test that the agent has successfully deployed,

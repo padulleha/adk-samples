@@ -136,7 +136,7 @@ The agent has access to the following tools:
     ```bash
     export GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_NAME_HERE
     export GOOGLE_GENAI_USE_VERTEXAI=1
-    export GOOGLE_CLOUD_LOCATION=us-central1
+    export GOOGLE_CLOUD_LOCATION=us-east1
     ```
 
 ## Running the Agent
