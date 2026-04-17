@@ -51,6 +51,7 @@ async def generate_visual(prompt: str) -> str:
     log.info(f"Dispatching to multi-modal model for prompt: '{prompt}'")
 
     try:
+        log.info("Attempting to generate image...")
         # Step 1: Generate the image bytes (same as before)
         global _genai_client
         if _genai_client is None:

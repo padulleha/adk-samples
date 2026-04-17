@@ -142,7 +142,11 @@ def main(mode):
     if not GOOGLE_CLOUD_LOCATION or GOOGLE_CLOUD_LOCATION == "global":
         GOOGLE_CLOUD_LOCATION = "us-central1"
     # Ensure GCP_STAGING_BUCKET is just the name, setup_staging_bucket will add gs:// prefix
-    GCP_STAGING_BUCKET_NAME = os.getenv("GCP_STAGING_BUCKET", f"{GOOGLE_CLOUD_PROJECT}-staging-bucket").replace("gs://", "")
+    GCP_STAGING_BUCKET_NAME = os.getenv("GCP_STAGING_BUCKET", "").replace("gs://", "")
+    if not GCP_STAGING_BUCKET_NAME:
+        logger.warning("GCP_STAGING_BUCKET is not set or is empty. Defaulting to '{GOOGLE_CLOUD_PROJECT}-staging-bucket'.")
+        GCP_STAGING_BUCKET_NAME = f"{GOOGLE_CLOUD_PROJECT}-staging-bucket"
+
     AGENT_ENGINE_ID = os.getenv("AGENT_ENGINE_ID")
 
     # Set up staging bucket
