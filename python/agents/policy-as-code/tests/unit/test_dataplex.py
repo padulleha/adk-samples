@@ -33,7 +33,7 @@ def test_entry_to_dict():
     mock_entry.entry_source.system = "BIGQUERY"
     mock_entry.entry_source.platform = "GCP"
     mock_entry.entry_source.display_name = "table1"
-    mock_entry.entry_source.location = "us-central1"
+    mock_entry.entry_source.location = "us-east1"
     mock_entry.entry_source.labels = {"env": "prod"}
 
     # Mock aspects

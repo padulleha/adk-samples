@@ -38,7 +38,7 @@ Required environment variables in `.env`:
 - `GOOGLE_CLOUD_PROJECT`: Your Google Cloud project ID.
 - `GCP_PROJECT`: Project ID where Vertex AI API and data pipelines will be deployed (used in dataproc sub-agent)
 - `GOOGLE_GENAI_USE_VERTEXAI`: Set to `TRUE` to use Vertex AI for generative models.
-- `GOOGLE_CLOUD_LOCATION`: The default Google Cloud location for your resources (e.g., `us-central1`).
+- `GOOGLE_CLOUD_LOCATION`: The default Google Cloud location for your resources (e.g., `us-east1`).
 
 ---
 

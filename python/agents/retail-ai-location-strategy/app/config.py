@@ -23,7 +23,7 @@ For LOCAL DEVELOPMENT (AI Studio):
 
 For PRODUCTION DEPLOYMENT (Vertex AI):
     GOOGLE_CLOUD_PROJECT=your-project-id
-    GOOGLE_CLOUD_LOCATION=us-central1
+    GOOGLE_CLOUD_LOCATION=us-east1
     GOOGLE_GENAI_USE_VERTEXAI=TRUE
     MAPS_API_KEY=your_maps_api_key
 """
@@ -46,7 +46,7 @@ USE_VERTEX_AI = (
 if USE_VERTEX_AI:
     GOOGLE_CLOUD_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
     GOOGLE_CLOUD_LOCATION = os.environ.get(
-        "GOOGLE_CLOUD_LOCATION", "us-central1"
+        "GOOGLE_CLOUD_LOCATION", "us-east1"
     )
     GOOGLE_API_KEY = ""  # Not used in Vertex AI mode
 else:

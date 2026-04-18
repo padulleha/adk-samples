@@ -43,7 +43,7 @@ if config_path.exists():
     load_dotenv(config_path)
 
 PROJECT_ID = os.getenv("PROJECT_ID", "my_project")
-US_REGION = os.getenv("US_REGION", "us-central1")
+US_REGION = os.getenv("US_REGION", "us-east1")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
 
 # Matryoshka dimension truncation — set to None to use full 3072d embeddings.

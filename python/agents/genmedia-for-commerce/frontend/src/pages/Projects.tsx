@@ -7,7 +7,7 @@ function Projects() {
 
       <main className="h-[calc(100vh-73px)]">
         <iframe
-          src="https://genmedia-pipes-205784806851.us-central1.run.app/"
+          src="https://genmedia-pipes-205784806851.us-east1.run.app/"
           title="GenMedia Pipes"
           className="w-full h-full border-0"
           sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"

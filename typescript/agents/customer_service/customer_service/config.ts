@@ -39,7 +39,7 @@ export class Config {
   appName: string = 'customer_service_app';
 
   CLOUD_PROJECT: string = getEnv('GOOGLE_CLOUD_PROJECT', 'my_project');
-  CLOUD_LOCATION: string = getEnv('GOOGLE_CLOUD_LOCATION', 'us-central1');
+  CLOUD_LOCATION: string = getEnv('GOOGLE_CLOUD_LOCATION', 'us-east1');
   GENAI_USE_VERTEXAI: string = getEnv('GOOGLE_GENAI_USE_VERTEXAI', '1');
   API_KEY: string = getEnv('GOOGLE_API_KEY', 'GOOGLE_API_KEY');
 }

@@ -109,7 +109,7 @@ uv sync
     ```bash
     GOOGLE_GENAI_USE_VERTEXAI=1
     GOOGLE_CLOUD_PROJECT=<your-project-id>
-    GOOGLE_CLOUD_LOCATION=us-central1
+    GOOGLE_CLOUD_LOCATION=us-east1
     MODEL_ARMOR_TEMPLATE_ID=<your-template-id>  # Only required for the Model Armor plugin
     ```
 

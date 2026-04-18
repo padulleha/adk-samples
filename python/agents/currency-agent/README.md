@@ -111,7 +111,7 @@ Create a `.env` file by running the following (replace `<your_project_id>` with 
 ```sh
 echo "GOOGLE_GENAI_USE_VERTEXAI=TRUE" >> .env \
 && echo "GOOGLE_CLOUD_PROJECT=<your_project_id>" >> .env \
-&& echo "GOOGLE_CLOUD_LOCATION=us-central1" >> .env
+&& echo "GOOGLE_CLOUD_LOCATION=us-east1" >> .env
 ```
 
 </details>

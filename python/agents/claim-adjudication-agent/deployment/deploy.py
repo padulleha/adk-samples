@@ -89,7 +89,7 @@ def main(argv: list[str]) -> None:
     # Priority: Flag -> Env -> None
     project_id = FLAGS.project_id or os.getenv("GOOGLE_CLOUD_PROJECT")
     location = (
-        FLAGS.location or os.getenv("GOOGLE_CLOUD_LOCATION") or "us-central1"
+        FLAGS.location or os.getenv("GOOGLE_CLOUD_LOCATION") or "us-east1"
     )
     # Using the existing bucket from .env
     bucket = FLAGS.bucket or os.getenv("AE_DEPLOYMENT_BUCKET")

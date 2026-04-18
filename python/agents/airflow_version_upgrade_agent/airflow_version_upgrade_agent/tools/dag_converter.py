@@ -78,7 +78,7 @@ def convert_dags(
         client = genai.Client(
             vertexai=True,
             project=project_id,
-            location="us-central1",  # Recommended to use regional endpoint for Vertex GenAI
+            location="us-east1",  # Recommended to use regional endpoint for Vertex GenAI
         )
 
         logging.info(

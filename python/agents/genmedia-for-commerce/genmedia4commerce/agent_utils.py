@@ -363,7 +363,7 @@ def test_vertex_connection(project: str, token: str) -> bool:
     """
     try:
         response = http_requests.post(
-            f"https://us-central1-aiplatform.googleapis.com/v1beta1/projects/{project}/locations/global/publishers/google/models/gemini-2.5-flash:countTokens",
+            f"https://us-east1-aiplatform.googleapis.com/v1beta1/projects/{project}/locations/global/publishers/google/models/gemini-2.5-flash:countTokens",
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",

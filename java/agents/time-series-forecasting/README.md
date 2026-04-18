@@ -174,7 +174,7 @@ This section describes how to deploy the MCP Toolbox server and the Java agent t
 5. **Set an environment variable for the container image**: This uses a public image for the MCP Toolbox.
 
     ```bash
-    export IMAGE=us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
+    export IMAGE=us-east1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
     ```
 
 6. **Deploy Toolbox to Cloud Run**: This command deploys the toolbox, making it listen on port 8080 internally, and mounts the `tools.yaml` from Secret Manager.
@@ -183,7 +183,7 @@ This section describes how to deploy the MCP Toolbox server and the Java agent t
     gcloud run deploy toolbox \
         --image "${IMAGE}" \
         --service-account "toolbox-identity@${PROJECT_ID}.iam.gserviceaccount.com" \
-        --region "us-central1" \
+        --region "us-east1" \
         --set-secrets "/app/tools.yaml=tools:latest" \
         --args="--tools-file=/app/tools.yaml,--address=0.0.0.0,--port=8080" \
         --allow-unauthenticated \
@@ -227,7 +227,7 @@ You can create a local proxy to your Cloud Run service for testing or if you wan
 1. **Proxy the Cloud Run service to your local machine**: This command makes your Cloud Run `toolbox` service accessible on `localhost:8080`.
 
     ```bash
-    gcloud run services proxy toolbox --port=8080 --region=us-central1 --project=${PROJECT_ID}
+    gcloud run services proxy toolbox --port=8080 --region=us-east1 --project=${PROJECT_ID}
     ```
 
     (See [gcloud run services proxy](https://cloud.google.com/sdk/gcloud/reference/run/services/proxy)) (You might need to run `gcloud auth login` and `gcloud auth application-default login` for the proxy to work.)

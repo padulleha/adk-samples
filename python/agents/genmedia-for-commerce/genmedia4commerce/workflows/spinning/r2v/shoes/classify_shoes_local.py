@@ -274,7 +274,7 @@ def _get_embedding_client():
     global _embedding_client
     if _embedding_client is None:
         project_id = os.getenv("PROJECT_ID", "my_project")
-        location = os.getenv("US_REGION", "us-central1")
+        location = os.getenv("US_REGION", "us-east1")
         logger.info(f"Creating embedding client for {location}")
         _embedding_client = genai.Client(
             vertexai=True, project=project_id, location=location

@@ -5,7 +5,7 @@ import os
 
 # Google Cloud Project Configuration
 PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-east1")
 
 # Memory Bank Configuration
 ENABLE_MEMORY_BANK = os.getenv("ENABLE_MEMORY_BANK", "True").lower() == "true"

@@ -79,7 +79,7 @@ def get_llm_project_id():
 def get_llm_location():
     """Return LOCATION from env (deferred for Agent Engine compatibility)."""
     return os.getenv("LOCATION") or os.getenv(
-        "GOOGLE_CLOUD_REGION", "us-central1"
+        "GOOGLE_CLOUD_REGION", "us-east1"
     )
 
 

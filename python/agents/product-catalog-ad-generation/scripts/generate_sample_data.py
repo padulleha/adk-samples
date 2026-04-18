@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
-LOCATION = os.getenv("GCP_LOCATION", "us-central1")
+LOCATION = os.getenv("GCP_LOCATION", "us-east1")
 COMPANY_NAME = os.getenv("COMPANY_NAME", "ACME Corp")
 
 # Output directories

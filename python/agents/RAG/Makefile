@@ -21,7 +21,7 @@ setup_corpus:
 		echo "GOOGLE_CLOUD_PROJECT=$$PROJECT_ID" >> .env; \
 	fi
 	@if ! grep -q "^GOOGLE_CLOUD_LOCATION=" .env; then \
-		echo "GOOGLE_CLOUD_LOCATION=us-central1" >> .env; \
+		echo "GOOGLE_CLOUD_LOCATION=us-east1" >> .env; \
 	fi
 	@read -p "Do you want to deploy the sample RAG corpus for this agent? (y/n) " deploy_corpus; \
 	if [ "$$deploy_corpus" = "y" ] || [ "$$deploy_corpus" = "Y" ]; then \

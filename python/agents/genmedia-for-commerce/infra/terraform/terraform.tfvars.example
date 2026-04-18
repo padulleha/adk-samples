@@ -5,7 +5,7 @@
 project_id = "your-gcp-project-id"
 
 # Optional - defaults shown
-region        = "us-central1"
+region        = "us-east1"
 service_name  = "genmedia-for-commerce"
 memory        = "32Gi"
 cpu           = "8"

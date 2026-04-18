@@ -63,7 +63,7 @@ Set up your `.env` file with the following credentials:
 ```bash
 GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_PROJECT=<your-project-id>
-GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_LOCATION=us-east1
 GEMINI_FLASH=gemini-2.5-flash
 CLAIM_DOCUMENTS_BUCKET=<your-gcs-bucket-name>
 CLAIM_DOCUMENTS_BUCKET_FOLDER=health_claim_documents
