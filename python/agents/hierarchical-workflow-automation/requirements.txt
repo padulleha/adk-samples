@@ -7,7 +7,7 @@ annotated-types==0.7.0
 anyio==4.10.0
 asyncio-mqtt==0.16.2
 attrs==25.3.0
-Authlib==1.6.3
+Authlib==1.6.11
 black==25.1.0
 Bottleneck==1.6.0
 cachetools==5.5.2
@@ -70,7 +70,7 @@ langchain==0.3.27
 langchain-community==0.3.29
 langchain-core==0.3.76
 langchain-google-vertexai==2.1.2
-langchain-text-splitters==0.3.11
+langchain-text-splitters==1.1.2
 langgraph==0.3.34
 langgraph-checkpoint==2.1.1
 langgraph-prebuilt==0.1.8
