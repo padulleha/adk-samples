@@ -235,7 +235,7 @@ gcloud services enable sqladmin.googleapis.com \
 gcloud sql instances create software-assistant \
 --database-version=POSTGRES_16 \
 --tier=db-custom-1-3840 \
---region=us-east1 \
+--region=us-central1 \
 --edition=ENTERPRISE \
 --enable-google-ml-integration \
 --database-flags cloudsql.enable_google_ml_integration=on
@@ -371,7 +371,7 @@ First, update `mcp-toolbox/tools.yaml` for your Cloud SQL instance:
   postgresql: # GCP -  CLOUD SQL
     kind: cloud-sql-postgres
     project: <your-project-id>
-    region: us-east1
+    region: us-central1
     instance: software-assistant
     database: tickets-db
     user: postgres
@@ -405,12 +405,12 @@ gcloud secrets create tools --data-file=deployment/mcp-toolbox/tools.yaml
 Now, let's deploy the Toolbox to Cloud Run. We'll use the [release version](https://github.com/googleapis/genai-toolbox/releases) of the MCP Toolbox image (we don't need to build or deploy the `toolbox` from source.)
 
 ```bash
-export IMAGE=us-east1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
+export IMAGE=us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:latest
 
 gcloud run deploy toolbox \
     --image $IMAGE \
     --service-account toolbox-identity \
-    --region us-east1 \
+    --region us-central1 \
     --set-secrets "/app/tools.yaml=tools:latest" \
     --args="--tools-file=/app/tools.yaml","--address=0.0.0.0","--port=8080"
     --allow-unauthenticated 
@@ -419,7 +419,7 @@ gcloud run deploy toolbox \
 Verify that the Toolbox is running by getting the Cloud Run logs: 
 
 ```bash 
-gcloud run services logs read toolbox --region us-east1
+gcloud run services logs read toolbox --region us-central1
 ```
 
 You should see: 
@@ -445,7 +445,7 @@ This is where we'll store the agent container image.
 ```bash
 gcloud artifacts repositories create adk-samples \
   --repository-format=docker \
-  --location=us-east1 \
+  --location=us-central1 \
   --description="Repository for ADK Java sample agents" \
   --project=$PROJECT_ID
 ```
@@ -454,7 +454,7 @@ Configure the Docker Credential Helper for Artifact Registry:
 
 ```bash
 gcloud auth configure-docker \
-    us-east1-docker.pkg.dev
+    us-central1-docker.pkg.dev
 ```
 
 
@@ -462,7 +462,7 @@ gcloud auth configure-docker \
 
 ```bash
 cd software-bug-assistant/ 
-IMAGE=us-east1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-demo-agents:latest 
+IMAGE=us-central1-docker.pkg.dev/$PROJECT_ID/adk-samples/adk-demo-agents:latest 
 
 docker build --platform linux/amd64 -t $IMAGE .
 docker push $IMAGE
@@ -480,7 +480,7 @@ MCP_TOOLBOX_URL="your-cloud-run-url-for-mcp-toolbox/mcp/"
 ```bash
 gcloud run deploy software-bug-assistant \
   --image=$IMAGE \
-  --region=us-east1 \
+  --region=us-central1 \
   --allow-unauthenticated \
   --set-env-vars=GOOGLE_API_KEY=$GOOGLE_API_KEY,MCP_TOOLBOX_URL=$MCP_TOOLBOX_URL 
 ```
@@ -497,7 +497,7 @@ Service [software-bug-assistant] revision [software-bug-assistant-00001-d4s] has
 Open the Cloud Run URL output by the `gcloud run deploy` command, for example: 
 
 ```bash
-Service URL: https://software-bug-assistant-65250193527.us-east1.run.app
+Service URL: https://software-bug-assistant-65250193527.us-central1.run.app
 ```
 
 You should see the ADK Web UI for the Software Bug Assistant. 

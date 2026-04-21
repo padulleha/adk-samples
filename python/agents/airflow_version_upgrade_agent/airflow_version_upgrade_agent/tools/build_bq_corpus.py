@@ -127,7 +127,7 @@ def generate_and_store_knowledge(
         return str(e)  # Return error to the agent
 
     client = genai.Client(
-        vertexai=True, project=project_id, location="us-east1"
+        vertexai=True, project=project_id, location="us-central1"
     )
 
     success_count = 0

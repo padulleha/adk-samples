@@ -249,7 +249,7 @@ def upscale_image_bytes(client, image_bytes, upscale_factor="x4"):
     original image if even x2 is too large.
 
     Args:
-        client: The genai.Client instance (must be configured for us-east1)
+        client: The genai.Client instance (must be configured for us-central1)
         image_bytes: The input image as bytes
         upscale_factor: Desired upscale factor - 'x2', 'x3', or 'x4' (default: "x4")
 

@@ -57,7 +57,7 @@ deploy-agent-engine:
 	uv export --no-hashes --no-header --no-dev --no-emit-project > genmedia4commerce/app_utils/.requirements.txt) && \
 	uv run -m genmedia4commerce.app_utils.deploy \
 		--project=$${PROJECT_ID} \
-		--location=$${DEFAULT_REGION:-us-east1} \
+		--location=$${DEFAULT_REGION:-us-central1} \
 		--source-packages=./genmedia4commerce \
 		--source-packages=./startup_scripts \
 		--entrypoint-module=genmedia4commerce.agent_engine_app \
@@ -191,7 +191,7 @@ eval-set-shoe-model:
 define TF_VARS
 source config.env && \
 export TF_VAR_project_id=$${PROJECT_ID} && \
-export TF_VAR_region=$${DEFAULT_REGION:-us-east1} && \
+export TF_VAR_region=$${DEFAULT_REGION:-us-central1} && \
 export TF_VAR_service_name=$${SERVICE_NAME:-genmedia-for-commerce} && \
 export TF_VAR_memory=$${MEMORY:-32Gi} && \
 export TF_VAR_cpu=$${CPU:-8} && \

@@ -41,7 +41,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
 # Default deployment location from env
-DEFAULT_LOCATION = os.environ.get("AGENT_ENGINE_LOCATION", "us-east1")
+DEFAULT_LOCATION = os.environ.get("AGENT_ENGINE_LOCATION", "us-central1")
 GOOGLE_CLOUD_LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
 GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY = os.environ.get(
     "GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "TRUE"
@@ -323,7 +323,7 @@ def main():
         "--location",
         "-l",
         default=DEFAULT_LOCATION,
-        help="GCP Location (default: us-east1)",
+        help="GCP Location (default: us-central1)",
     )
     deploy_parser.add_argument(
         "--name",

@@ -230,7 +230,7 @@ python3 deploy.py --create
 When this command returns, if it succeeds it will print an AgentEngine resource
 name that looks something like this:
 ```
-projects/************/locations/us-east1/reasoningEngines/7737333693403889664
+projects/************/locations/us-central1/reasoningEngines/7737333693403889664
 ```
 The last sequence of digits is the AgentEngine resource ID.
 

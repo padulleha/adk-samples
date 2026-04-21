@@ -79,7 +79,7 @@ value: your_project_id
 
 mcp__chrome-devtools__fill
 uid: <gcp-location-field-uid>
-value: us-east1
+value: us-central1
 ```
 
 ### Step 4: Connect WebSocket

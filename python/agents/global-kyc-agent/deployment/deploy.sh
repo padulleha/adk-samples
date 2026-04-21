@@ -5,7 +5,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Default values
-REGION="us-east1"
+REGION="us-central1"
 DISPLAY_NAME="Global KYC Agent"
 PROJECT_ID=""
 ENV_FILE=""
@@ -15,7 +15,7 @@ usage() {
     echo "Usage: $0 --project PROJECT_ID [options]"
     echo "Options:"
     echo "  -p, --project PROJECT_ID    Google Cloud Project ID (Required)"
-    echo "  -r, --region REGION          Google Cloud Region (Default: us-east1)"
+    echo "  -r, --region REGION          Google Cloud Region (Default: us-central1)"
     echo "  -n, --name NAME              Display name for the agent (Default: Global KYC Agent)"
     echo "  -e, --env-file FILE          Path to .env file"
     echo "  -h, --help                   Show this help message"

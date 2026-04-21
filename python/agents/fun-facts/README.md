@@ -56,10 +56,10 @@ You can interact with your agent locally using the ADK CLI tools:
 
 Deploying your agent to Google Cloud allows it to be used as a managed service.
 
-NOTE: For this agent, `--region` must be passed explicitly because the Gemini model requires the `global` endpoint, but Agent Engine must be deployed to a regional endpoint (e.g. `us-east1`).
+NOTE: For this agent, `--region` must be passed explicitly because the Gemini model requires the `global` endpoint, but Agent Engine must be deployed to a regional endpoint (e.g. `us-central1`).
 
 ```bash
-adk deploy agent_engine fun_facts --region="us-east1"
+adk deploy agent_engine fun_facts --region="us-central1"
 ```
 
 This command will package your agent, upload it to Vertex AI, and create an **Agent Engine** resource.
@@ -67,7 +67,7 @@ This command will package your agent, upload it to Vertex AI, and create an **Ag
 The resource name will look something like this:
 
 ```none
-projects/PROJECT_NUMBER/locations/us-east1/reasoningEngines/AGENT_ENGINE_ID
+projects/PROJECT_NUMBER/locations/us-central1/reasoningEngines/AGENT_ENGINE_ID
 ```
 
 You can view Agent Engine resources in the Cloud Console here: <https://console.cloud.google.com/vertex-ai/agents/agent-engines>.

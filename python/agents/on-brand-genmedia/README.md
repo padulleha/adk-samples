@@ -156,7 +156,7 @@ You can deploy the Guidelines Driven Media Gen Agent directly to Google Cloud's 
     {
       "operation": "create",
       "project_id": "YOUR_GCP_PROJECT",
-      "location": "us-east1",
+      "location": "us-central1",
       "bucket_name": "YOUR_STAGING_BUCKET"
     }
     ```

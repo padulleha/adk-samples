@@ -310,7 +310,7 @@ uv sync
 cp .env.example .env
 # Edit .env with your GCP project ID:
 #   PROJECT_ID=your-gcp-project-id
-#   LOCATION=us-east1
+#   LOCATION=us-central1
 
 # Authenticate with GCP
 gcloud auth application-default login
@@ -323,7 +323,7 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PROJECT_ID` | (required) | GCP project ID |
-| `LOCATION` | `us-east1` | GCP region |
+| `LOCATION` | `us-central1` | GCP region |
 | `GEMINI_FLASH_MODEL` | `gemini-2.5-flash` | Model for the ADK agent |
 | `GEMINI_PRO_MODEL` | `gemini-2.5-pro` | Model for ALF pipeline continuation and investigation |
 | `API_CALL_DELAY_SECONDS` | `1.0` | Rate limiting between API calls |

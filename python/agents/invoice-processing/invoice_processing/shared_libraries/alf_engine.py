@@ -187,7 +187,7 @@ def _get_llm_project_id():
 
 def _get_llm_location():
     return os.getenv("LOCATION") or os.getenv(
-        "GOOGLE_CLOUD_REGION", "us-east1"
+        "GOOGLE_CLOUD_REGION", "us-central1"
     )
 
 

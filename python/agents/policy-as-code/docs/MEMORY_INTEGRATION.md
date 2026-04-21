@@ -18,7 +18,7 @@ To use the memory bank, you must have a Firestore database created in your Googl
 1.  Go to the [Firestore Console](https://console.cloud.google.com/firestore).
 2.  Click **Create Database**.
 3.  Select **Native Mode** (required for Vector Search).
-4.  Choose your location (e.g., `us-east1`).
+4.  Choose your location (e.g., `us-central1`).
 5.  Create the database (default name is usually `(default)`).
 
 ### 2. Configure Environment Variables

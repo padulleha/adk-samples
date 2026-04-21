@@ -220,7 +220,7 @@ GOOGLE_CLOUD_LOCATION=global
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
 
 # Agent Engine deployment location (separate from GOOGLE_CLOUD_LOCATION)
-AGENT_ENGINE_LOCATION=us-east1
+AGENT_ENGINE_LOCATION=us-central1
 GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=TRUE
 OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=TRUE
 
@@ -430,7 +430,7 @@ make deploy-check
 make deploy
 
 # Or with custom configuration:
-make deploy PROJECT_ID=my-project LOCATION=us-east1 AGENT_NAME=nexshift-agent
+make deploy PROJECT_ID=my-project LOCATION=us-central1 AGENT_NAME=nexshift-agent
 ```
 
 #### Manage Deployed Agents

@@ -87,7 +87,7 @@ class _GCPConfig:
     """Mutable container for GCP configuration (lazy-initialized)."""
 
     PROJECT_ID: str | None = None
-    LOCATION: str = "us-east1"
+    LOCATION: str = "us-central1"
     GEMINI_FLASH_MODEL: str = "gemini-2.5-flash"
     GEMINI_PRO_MODEL: str = "gemini-2.5-pro"
     API_CALL_DELAY_SECONDS: float = 1.0
@@ -95,7 +95,7 @@ class _GCPConfig:
 
 
 _gcp_config = _GCPConfig(
-    LOCATION=os.getenv("LOCATION", "us-east1"),
+    LOCATION=os.getenv("LOCATION", "us-central1"),
     GEMINI_FLASH_MODEL=os.getenv("GEMINI_FLASH_MODEL", "gemini-2.5-flash"),
     GEMINI_PRO_MODEL=os.getenv("GEMINI_PRO_MODEL", "gemini-2.5-pro"),
     API_CALL_DELAY_SECONDS=float(os.getenv("API_CALL_DELAY_SECONDS", "1.0")),
@@ -115,7 +115,7 @@ def _ensure_gcp_initialized():
         or os.getenv("GCP_PROJECT")
     )
     _gcp_config.LOCATION = os.getenv("LOCATION") or os.getenv(
-        "GOOGLE_CLOUD_REGION", "us-east1"
+        "GOOGLE_CLOUD_REGION", "us-central1"
     )
     _gcp_config.GEMINI_FLASH_MODEL = os.getenv(
         "GEMINI_FLASH_MODEL", "gemini-2.5-flash"

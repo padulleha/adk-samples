@@ -3,7 +3,7 @@
 ## v0.3.1 - Refactor deployment and model updates
 
 - Upgraded image generation model to `imagen-4.0-ultra-generate-001`.
-- Set the location for video generation model to `us-east1`.
+- Set the location for video generation model to `us-central1`.
 - Added `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` to the backend deployment in `Makefile`.
 - Removed Terraform-based deployment, updated `README.md` and `Makefile` to reflect this change.
 

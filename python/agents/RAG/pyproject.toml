@@ -46,7 +46,7 @@ dev = [
 
 # --- CI/CD AND TESTING METADATA ---
 [tool.agent-starter-pack.testing]
-RAG_CORPUS = "projects/adk-devops/locations/us-east1/ragCorpora/456"
+RAG_CORPUS = "projects/adk-devops/locations/us-central1/ragCorpora/456"
 ENV = "test"
 
 [tool.ruff]

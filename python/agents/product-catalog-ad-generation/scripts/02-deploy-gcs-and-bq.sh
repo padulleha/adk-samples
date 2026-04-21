@@ -40,7 +40,7 @@ if [ -z "${PROJECT_ID}" ]; then
   exit 1
 fi
 
-REGION=${REGION:-"us-east1"}
+REGION=${REGION:-"us-central1"}
 
 # --- GCS Bucket Name ---
 # Bucket for storing static content like branding.
