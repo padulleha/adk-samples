@@ -26,7 +26,7 @@ license = "Apache-2.0"
 requires-python = ">=3.11,<3.14"
 
 dependencies = [
-    "google-adk>=1.27.4",
+    "google-adk>=1.28.1",
     "google-auth>=2.45.0",
     "google-cloud-aiplatform[agent-engines]>=1.142.0",
     "google-cloud-modelarmor>=0.4.0",
@@ -34,7 +34,7 @@ dependencies = [
     "pillow==11.3.0",
     "pydantic>=2.12.0",
     "pydantic-settings==2.13.1",
-    "python-dotenv==1.1.1",
+    "python-dotenv==1.2.2",
     "google-cloud-storage==2.19.0",
     "google-genai>=1.68.0",
     "matplotlib==3.10.6",
