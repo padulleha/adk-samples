@@ -70,6 +70,8 @@ adk web
 > **Personal note:** I've found `adk web` the easiest way to explore samples interactively — it hot-reloads on file changes, which is handy during development.
 >
 > **Tip:** If you're on macOS and `adk web` opens a blank page, try visiting `http://127.0.0.1:8000` instead of `http://localhost:8000` — fixed a confusing issue for me.
+>
+> **Tip:** If you get an `Application Default Credentials` error on first run, execute `gcloud auth application-default login` and try again — easy to miss in the setup docs.
 
 ## Repository Structure
 
