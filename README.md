@@ -74,6 +74,8 @@ adk web
 > **Tip:** If you get an `Application Default Credentials` error on first run, execute `gcloud auth application-default login` and try again — easy to miss in the setup docs.
 >
 > **Tip:** If you have multiple Google Cloud projects and want to quickly switch between them without editing `.env`, you can override the project inline: `GOOGLE_CLOUD_PROJECT=my-other-project adk run agents/<sample-name>` — saves time when testing across projects.
+>
+> **Tip:** To avoid accidentally committing your `.env` file, double-check that `.env` is listed in `.gitignore` before your first commit — `grep '.env' .gitignore` should confirm it.
 
 ## Repository Structure
 
@@ -94,13 +96,4 @@ Contributions are welcome! Please read our [contribution guidelines](CONTRIBUTIN
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feat/my-new-sample`)
 3. Commit your changes (`git commit -m 'feat: add new sample agent'`)
-4. Push to the branch (`git push origin feat/my-new-sample`)
-5. Open a Pull Request
-
-## Reporting Issues
-
-Use the [GitHub Issues](../../issues) page to report bugs or request new samples. Please use the provided issue templates.
-
-## License
-
-This project is licensed under the Apache 2.0 License.
+4. Push to the branch (`
