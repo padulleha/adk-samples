@@ -67,6 +67,8 @@ Or launch the ADK web UI:
 adk web
 ```
 
+> **Personal note:** I've found `adk web` the easiest way to explore samples interactively — it hot-reloads on file changes, which is handy during development.
+
 ## Repository Structure
 
 ```
