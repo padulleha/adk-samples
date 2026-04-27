@@ -72,6 +72,8 @@ adk web
 > **Tip:** If you're on macOS and `adk web` opens a blank page, try visiting `http://127.0.0.1:8000` instead of `http://localhost:8000` — fixed a confusing issue for me.
 >
 > **Tip:** If you get an `Application Default Credentials` error on first run, execute `gcloud auth application-default login` and try again — easy to miss in the setup docs.
+>
+> **Tip:** If you have multiple Google Cloud projects and want to quickly switch between them without editing `.env`, you can override the project inline: `GOOGLE_CLOUD_PROJECT=my-other-project adk run agents/<sample-name>` — saves time when testing across projects.
 
 ## Repository Structure
 
@@ -101,4 +103,4 @@ Use the [GitHub Issues](../../issues) page to report bugs or request new samples
 
 ## License
 
-This project is licensed under the Apache 2.0 License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache 2.0 License.
