@@ -76,6 +76,8 @@ adk web
 > **Tip:** If you have multiple Google Cloud projects and want to quickly switch between them without editing `.env`, you can override the project inline: `GOOGLE_CLOUD_PROJECT=my-other-project adk run agents/<sample-name>` — saves time when testing across projects.
 >
 > **Tip:** To avoid accidentally committing your `.env` file, double-check that `.env` is listed in `.gitignore` before your first commit — `grep '.env' .gitignore` should confirm it.
+>
+> **Tip:** Running `adk web --port 8080` is useful if port 8000 is already occupied by another service — I keep a note of this since I often run a local dev server alongside.
 
 ## Repository Structure
 
@@ -91,9 +93,4 @@ adk-samples/
 
 ## Contributing
 
-Contributions are welcome! Please read our [contribution guidelines](CONTRIBUTING.md) before submitting a pull request.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/my-new-sample`)
-3. Commit your changes (`git commit -m 'feat: add new sample agent'`)
-4. Push to the branch (`
+Contributions are welcome! Please read our [contribution guidelines](CONTRIBUTING.md) before submitting a pull request
